@@ -1,0 +1,6 @@
+config.ini
+cookie.txt
+*.cookie
+__pycache__/
+*.flow
+*.log
