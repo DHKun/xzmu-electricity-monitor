@@ -10,26 +10,8 @@ class QueryWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx,
     override suspend fun doWork(): Result {
         val ctx = applicationContext
         if (!Prefs.configured(ctx)) return Result.success()
-
-        val r = PowerApi.queryRoomState(ctx, Prefs.payProId(ctx), Prefs.roomVerify(ctx))
-        Prefs.setLastCheck(ctx, System.currentTimeMillis())
-
-        // 会话刷新(服务端可能通过 Set-Cookie 续期)
-        r.setCookie?.let { Prefs.setCookieSnapshot(ctx, it) }
-
-        when {
-            r.sessionDead -> {
-                Prefs.setAlerted(ctx, false)
-                AlertNotify.info(ctx, "电费监控: 登录已过期",
-                    "点击重新登录, 登录后选择房间即可恢复监控", openSetup = true)
-            }
-            r.ok && r.quantity != null -> {
-                AlertEval.evaluate(ctx, r.quantity!!, r.unit)
-            }
-            else -> {
-                // 网络错误等: 静默, 下个周期再试
-            }
-        }
+        // 网络错误等静默, 下个周期再试
+        PowerSync.sync(ctx)
         return Result.success()
     }
 

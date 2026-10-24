@@ -1,198 +1,539 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fillViewport="true"
-    android:scrollbars="none">
+    android:fitsSystemWindows="true">
 
-    <LinearLayout
+    <!-- M3 大标题顶栏, 随滚动收起 -->
+    <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/appBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:paddingStart="20dp"
-        android:paddingEnd="20dp"
-        android:paddingBottom="28dp">
+        android:fitsSystemWindows="true"
+        app:liftOnScroll="true">
 
-        <!-- iOS 大标题 -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="XZMU 电费"
-            android:textColor="@color/ios_label"
-            android:textSize="34sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/roomText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:textColor="@color/ios_secondary_label"
-            android:textSize="15sp" />
-
-        <!-- 余额卡片 -->
-        <LinearLayout
+        <com.google.android.material.appbar.CollapsingToolbarLayout
+            style="?attr/collapsingToolbarLayoutLargeStyle"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:background="@drawable/bg_card"
-            android:gravity="center_horizontal"
-            android:orientation="vertical"
-            android:paddingStart="24dp"
-            android:paddingTop="28dp"
-            android:paddingEnd="24dp"
-            android:paddingBottom="24dp">
+            android:layout_height="?attr/collapsingToolbarLayoutLargeSize"
+            app:layout_scrollFlags="scroll|exitUntilCollapsed|snap"
+            app:title="宿舍电费">
 
-            <TextView
-                android:id="@+id/balanceText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:fontFamily="sans-serif-light"
-                android:text="--"
-                android:textColor="@color/ios_orange"
-                android:textSize="76sp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="剩余电量(度)"
-                android:textColor="@color/ios_secondary_label"
-                android:textSize="13sp" />
-
-            <ProgressBar
-                android:id="@+id/progressBar"
-                style="?android:attr/progressBarStyleHorizontal"
+            <com.google.android.material.appbar.MaterialToolbar
+                android:id="@+id/toolbar"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
-                android:progressTint="@color/ios_orange"
-                android:progressBackgroundTint="@color/ios_fill"
-                android:visibility="gone" />
-        </LinearLayout>
+                android:layout_height="?attr/actionBarSize"
+                android:elevation="0dp"
+                app:layout_collapseMode="pin"
+                app:menu="@menu/main" />
+        </com.google.android.material.appbar.CollapsingToolbarLayout>
+    </com.google.android.material.appbar.AppBarLayout>
 
-        <TextView
-            android:id="@+id/statusText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            android:layout_marginTop="8dp"
-            android:textColor="@color/ios_secondary_label"
-            android:textSize="13sp" />
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/swipe"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
-        <!-- 主按钮 -->
-        <Button
-            android:id="@+id/queryBtn"
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/scroll"
             android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:layout_marginTop="16dp"
-            android:background="@drawable/btn_primary"
-            android:text="立即查询"
-            android:textAllCaps="false"
-            android:textColor="#FFFFFF"
-            android:textSize="17sp" />
-
-        <!-- 设置分组 -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:background="@drawable/bg_card"
-            android:orientation="vertical">
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:scrollbars="none">
 
             <LinearLayout
+                android:id="@+id/content"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
+                android:orientation="vertical"
                 android:paddingStart="16dp"
-                android:paddingTop="14dp"
+                android:paddingTop="8dp"
                 android:paddingEnd="16dp"
-                android:paddingBottom="14dp">
+                android:paddingBottom="24dp">
 
-                <TextView
-                    android:layout_width="0dp"
+                <!-- 主卡 -->
+                <com.google.android.material.card.MaterialCardView
+                    style="?attr/materialCardViewFilledStyle"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="低电量阈值(度)"
-                    android:textColor="@color/ios_label"
-                    android:textSize="17sp" />
+                    app:cardBackgroundColor="?attr/colorPrimaryContainer"
+                    app:cardCornerRadius="28dp">
 
-                <EditText
-                    android:id="@+id/thresholdEdit"
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="20dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <ImageView
+                                android:layout_width="18dp"
+                                android:layout_height="18dp"
+                                android:importantForAccessibility="no"
+                                android:src="@drawable/ic_home"
+                                app:tint="?attr/colorOnPrimaryContainer" />
+
+                            <TextView
+                                android:id="@+id/roomText"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="8dp"
+                                android:layout_weight="1"
+                                android:ellipsize="end"
+                                android:maxLines="1"
+                                android:textAppearance="?attr/textAppearanceTitleMedium"
+                                android:textColor="?attr/colorOnPrimaryContainer" />
+
+                            <LinearLayout
+                                android:id="@+id/levelPill"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:background="@drawable/bg_pill"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:paddingStart="10dp"
+                                android:paddingTop="4dp"
+                                android:paddingEnd="12dp"
+                                android:paddingBottom="4dp">
+
+                                <View
+                                    android:id="@+id/levelDot"
+                                    android:layout_width="8dp"
+                                    android:layout_height="8dp"
+                                    android:background="@drawable/bg_dot" />
+
+                                <TextView
+                                    android:id="@+id/levelText"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="6dp"
+                                    android:textAppearance="?attr/textAppearanceLabelLarge"
+                                    android:textColor="?attr/colorOnSurface" />
+                            </LinearLayout>
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="20dp"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <FrameLayout
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content">
+
+                                <com.google.android.material.progressindicator.CircularProgressIndicator
+                                    android:id="@+id/ring"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:max="100"
+                                    app:indicatorColor="?attr/colorPrimary"
+                                    app:indicatorSize="120dp"
+                                    app:trackColor="@color/hero_track"
+                                    app:trackCornerRadius="6dp"
+                                    app:trackThickness="12dp" />
+
+                                <LinearLayout
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_gravity="center"
+                                    android:gravity="center_horizontal"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:id="@+id/percentText"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:textAppearance="?attr/textAppearanceTitleLarge"
+                                        android:textColor="?attr/colorOnPrimaryContainer"
+                                        android:textStyle="bold" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="余量"
+                                        android:textAppearance="?attr/textAppearanceLabelSmall"
+                                        android:textColor="@color/hero_secondary" />
+                                </LinearLayout>
+                            </FrameLayout>
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="20dp"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <LinearLayout
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:baselineAligned="true"
+                                    android:orientation="horizontal">
+
+                                    <TextView
+                                        android:id="@+id/qtyText"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:maxLines="1"
+                                        android:text="--"
+                                        android:textAppearance="?attr/textAppearanceDisplayLarge"
+                                        android:textColor="?attr/colorOnPrimaryContainer" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginStart="4dp"
+                                        android:text="度"
+                                        android:textAppearance="?attr/textAppearanceTitleLarge"
+                                        android:textColor="@color/hero_secondary" />
+                                </LinearLayout>
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="剩余电量"
+                                    android:textAppearance="?attr/textAppearanceBodyMedium"
+                                    android:textColor="@color/hero_secondary" />
+
+                                <TextView
+                                    android:id="@+id/timeText"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="12dp"
+                                    android:textAppearance="?attr/textAppearanceBodySmall"
+                                    android:textColor="@color/hero_secondary" />
+                            </LinearLayout>
+                        </LinearLayout>
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- 会话过期 / 查询失败提示 -->
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/banner"
+                    style="?attr/materialCardViewFilledStyle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:visibility="gone"
+                    app:cardBackgroundColor="?attr/colorErrorContainer"
+                    app:cardCornerRadius="20dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingStart="16dp"
+                        android:paddingTop="6dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="6dp">
+
+                        <ImageView
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:importantForAccessibility="no"
+                            android:src="@drawable/ic_warning"
+                            app:tint="?attr/colorOnErrorContainer" />
+
+                        <TextView
+                            android:id="@+id/bannerText"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="12dp"
+                            android:layout_weight="1"
+                            android:textAppearance="?attr/textAppearanceBodyMedium"
+                            android:textColor="?attr/colorOnErrorContainer" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/bannerBtn"
+                            style="?attr/borderlessButtonStyle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="重新登录"
+                            android:textColor="?attr/colorOnErrorContainer" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- 统计 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.card.MaterialCardView
+                        style="?attr/materialCardViewFilledStyle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="6dp"
+                        android:layout_weight="1"
+                        app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
+                        app:cardCornerRadius="24dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:padding="16dp">
+
+                            <FrameLayout
+                                android:layout_width="40dp"
+                                android:layout_height="40dp"
+                                android:background="@drawable/bg_icon_circle">
+
+                                <ImageView
+                                    android:layout_width="20dp"
+                                    android:layout_height="20dp"
+                                    android:layout_gravity="center"
+                                    android:importantForAccessibility="no"
+                                    android:src="@drawable/ic_hourglass"
+                                    app:tint="?attr/colorOnSecondaryContainer" />
+                            </FrameLayout>
+
+                            <LinearLayout
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="14dp"
+                                android:baselineAligned="true"
+                                android:orientation="horizontal">
+
+                                <TextView
+                                    android:id="@+id/daysText"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="--"
+                                    android:textAppearance="?attr/textAppearanceHeadlineMedium"
+                                    android:textColor="?attr/colorOnSurface" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="4dp"
+                                    android:text="天"
+                                    android:textAppearance="?attr/textAppearanceTitleSmall"
+                                    android:textColor="?attr/colorOnSurfaceVariant" />
+                            </LinearLayout>
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="预计可用"
+                                android:textAppearance="?attr/textAppearanceTitleSmall"
+                                android:textColor="?attr/colorOnSurface" />
+
+                            <TextView
+                                android:id="@+id/daysSub"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:textAppearance="?attr/textAppearanceBodySmall"
+                                android:textColor="?attr/colorOnSurfaceVariant" />
+                        </LinearLayout>
+                    </com.google.android.material.card.MaterialCardView>
+
+                    <com.google.android.material.card.MaterialCardView
+                        style="?attr/materialCardViewFilledStyle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:layout_weight="1"
+                        app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
+                        app:cardCornerRadius="24dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:padding="16dp">
+
+                            <FrameLayout
+                                android:layout_width="40dp"
+                                android:layout_height="40dp"
+                                android:background="@drawable/bg_icon_circle">
+
+                                <ImageView
+                                    android:layout_width="20dp"
+                                    android:layout_height="20dp"
+                                    android:layout_gravity="center"
+                                    android:importantForAccessibility="no"
+                                    android:src="@drawable/ic_trending_down"
+                                    app:tint="?attr/colorOnSecondaryContainer" />
+                            </FrameLayout>
+
+                            <LinearLayout
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="14dp"
+                                android:baselineAligned="true"
+                                android:orientation="horizontal">
+
+                                <TextView
+                                    android:id="@+id/dailyText"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="--"
+                                    android:textAppearance="?attr/textAppearanceHeadlineMedium"
+                                    android:textColor="?attr/colorOnSurface" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="4dp"
+                                    android:text="度"
+                                    android:textAppearance="?attr/textAppearanceTitleSmall"
+                                    android:textColor="?attr/colorOnSurfaceVariant" />
+                            </LinearLayout>
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="日均用电"
+                                android:textAppearance="?attr/textAppearanceTitleSmall"
+                                android:textColor="?attr/colorOnSurface" />
+
+                            <TextView
+                                android:id="@+id/dailySub"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:textAppearance="?attr/textAppearanceBodySmall"
+                                android:textColor="?attr/colorOnSurfaceVariant" />
+                        </LinearLayout>
+                    </com.google.android.material.card.MaterialCardView>
+                </LinearLayout>
+
+                <!-- 提醒设置 -->
+                <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:background="@null"
-                    android:gravity="end"
-                    android:hint="20"
-                    android:inputType="numberDecimal"
-                    android:minWidth="64dp"
-                    android:textColor="@color/ios_label"
-                    android:textColorHint="@color/ios_secondary_label"
-                    android:textSize="17sp" />
-            </LinearLayout>
+                    android:layout_marginStart="16dp"
+                    android:layout_marginTop="24dp"
+                    android:layout_marginBottom="8dp"
+                    android:text="提醒"
+                    android:textAppearance="?attr/textAppearanceTitleSmall"
+                    android:textColor="?attr/colorPrimary" />
 
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:layout_marginStart="16dp"
-                android:background="@color/ios_separator" />
+                <LinearLayout
+                    android:id="@+id/rowNotify"
+                    style="@style/SettingRow"
+                    android:background="@drawable/bg_group_top">
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingStart="16dp"
-                android:paddingTop="14dp"
-                android:paddingEnd="16dp"
-                android:paddingBottom="14dp">
+                    <ImageView
+                        style="@style/SettingIcon"
+                        android:src="@drawable/ic_notifications" />
 
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="自动查询"
-                    android:textColor="@color/ios_label"
-                    android:textSize="17sp" />
+                    <LinearLayout style="@style/SettingTexts">
 
+                        <TextView
+                            style="@style/SettingTitle"
+                            android:text="低电量通知" />
+
+                        <TextView
+                            android:id="@+id/notifySub"
+                            style="@style/SettingSub" />
+                    </LinearLayout>
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/notifySwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:clickable="false"
+                        android:focusable="false" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/rowThreshold"
+                    style="@style/SettingRow"
+                    android:layout_marginTop="2dp"
+                    android:background="@drawable/bg_group_middle">
+
+                    <ImageView
+                        style="@style/SettingIcon"
+                        android:src="@drawable/ic_battery_alert" />
+
+                    <LinearLayout style="@style/SettingTexts">
+
+                        <TextView
+                            style="@style/SettingTitle"
+                            android:text="提醒阈值" />
+
+                        <TextView
+                            android:id="@+id/thresholdSub"
+                            style="@style/SettingSub" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/rowAuto"
+                    style="@style/SettingRow"
+                    android:layout_marginTop="2dp"
+                    android:background="@drawable/bg_group_bottom">
+
+                    <ImageView
+                        style="@style/SettingIcon"
+                        android:src="@drawable/ic_schedule" />
+
+                    <LinearLayout style="@style/SettingTexts">
+
+                        <TextView
+                            style="@style/SettingTitle"
+                            android:text="自动查询" />
+
+                        <TextView
+                            style="@style/SettingSub"
+                            android:text="约每 6 小时在后台查询一次" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- 绑定 -->
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="每 6 小时"
-                    android:textColor="@color/ios_secondary_label"
-                    android:textSize="17sp" />
+                    android:layout_marginStart="16dp"
+                    android:layout_marginTop="24dp"
+                    android:layout_marginBottom="8dp"
+                    android:text="宿舍"
+                    android:textAppearance="?attr/textAppearanceTitleSmall"
+                    android:textColor="?attr/colorPrimary" />
+
+                <LinearLayout
+                    android:id="@+id/rowRebind"
+                    style="@style/SettingRow"
+                    android:background="@drawable/bg_group_single">
+
+                    <ImageView
+                        style="@style/SettingIcon"
+                        android:src="@drawable/ic_autorenew"
+                        app:tint="?attr/colorError" />
+
+                    <LinearLayout style="@style/SettingTexts">
+
+                        <TextView
+                            style="@style/SettingTitle"
+                            android:text="重新绑定宿舍"
+                            android:textColor="?attr/colorError" />
+
+                        <TextView
+                            style="@style/SettingSub"
+                            android:text="重新登录并选择房间, 成功后替换当前绑定" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:gravity="center"
+                    android:text="数据来自完美校园云缴费, 仅保存在本机"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
             </LinearLayout>
-        </LinearLayout>
-
-        <!-- 危险操作分组 -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:background="@drawable/bg_card"
-            android:orientation="vertical">
-
-            <Button
-                android:id="@+id/rebindBtn"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="@null"
-                android:paddingTop="14dp"
-                android:paddingBottom="14dp"
-                android:text="重新登录 / 重设房间"
-                android:textAllCaps="false"
-                android:textColor="@color/ios_red"
-                android:textSize="17sp" />
-        </LinearLayout>
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            android:layout_marginTop="10dp"
-            android:text="低于阈值时发送系统通知提醒充值"
-            android:textColor="@color/ios_secondary_label"
-            android:textSize="13sp" />
-    </LinearLayout>
-</ScrollView>
+        </androidx.core.widget.NestedScrollView>
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

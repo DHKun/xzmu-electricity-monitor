@@ -1,6 +1,8 @@
 package io.github.dhkun.xzmupower
 
 import android.annotation.SuppressLint
+import android.content.Intent
+import android.content.res.ColorStateList
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
@@ -8,11 +10,17 @@ import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.Button
-import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
+import com.google.android.material.appbar.MaterialToolbar
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.color.MaterialColors
+import com.google.android.material.progressindicator.LinearProgressIndicator
 import java.util.concurrent.Executors
 
 /**
@@ -26,9 +34,10 @@ class SetupActivity : AppCompatActivity() {
 
     private val exec = Executors.newSingleThreadExecutor()
     private lateinit var webView: WebView
-    private lateinit var progressBar: ProgressBar
+    private lateinit var progressBar: LinearProgressIndicator
     private lateinit var hintText: TextView
-    private lateinit var doneBtn: Button
+    private lateinit var doneBtn: MaterialButton
+    private val steps = arrayOf("登录", "选择项目", "选择房间")
 
     private var pendingPayProId: String? = null
     private var pendingRoomVerify: String? = null
@@ -39,13 +48,29 @@ class SetupActivity : AppCompatActivity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_setup)
+
+        val root = findViewById<View>(R.id.root)
+        ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime())
+            v.updatePadding(top = bars.top, bottom = bars.bottom)
+            insets
+        }
+        // 从首页"重新绑定"进来时可返回; 首次绑定没有上一页
+        val toolbar = findViewById<MaterialToolbar>(R.id.toolbar)
+        if (intent.getBooleanExtra(EXTRA_REBIND, false)) {
+            toolbar.setNavigationIcon(R.drawable.ic_arrow_back)
+            toolbar.setNavigationIconTint(MaterialColors.getColor(toolbar, com.google.android.material.R.attr.colorOnSurface))
+            toolbar.setNavigationOnClickListener { finish() }
+        }
 
         webView = findViewById(R.id.webView)
         progressBar = findViewById(R.id.progressBar)
         hintText = findViewById(R.id.hintText)
         doneBtn = findViewById(R.id.doneBtn)
+        setStep(0)
 
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
@@ -61,7 +86,7 @@ class SetupActivity : AppCompatActivity() {
             ) = intercept(request.url).let { null }
 
             override fun onPageFinished(view: WebView, url: String) {
-                progressBar.visibility = View.GONE
+                progressBar.visibility = View.INVISIBLE
                 updateHint(url)
                 if (url.contains("api/authorize")) {
                     injectSchoolSearch(view)
@@ -77,8 +102,8 @@ class SetupActivity : AppCompatActivity() {
         }
         webView.webChromeClient = object : android.webkit.WebChromeClient() {
             override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                progressBar.progress = newProgress
-                progressBar.visibility = if (newProgress < 100) View.VISIBLE else View.GONE
+                progressBar.setProgressCompat(newProgress, true)
+                progressBar.visibility = if (newProgress < 100) View.VISIBLE else View.INVISIBLE
             }
         }
 
@@ -111,20 +136,50 @@ class SetupActivity : AppCompatActivity() {
         pendingPayProId = payProId
         pendingRoomVerify = roomVerify
         runOnUiThread {
-            hintText.text = "检测到房间 $roomVerify, 正在验证会话…"
-            Toast.makeText(this, "检测到房间, 验证中…", Toast.LENGTH_SHORT).show()
+            hintText.text = "检测到房间 $roomVerify, 正在验证…"
             tryFinish()
         }
     }
 
     private fun updateHint(url: String) {
-        val step = when {
-            url.contains("open.17wanxiao.com") -> "① 请登录(完美校园帐号或校园卡认证)"
-            url.contains("bill/type.do") || url.contains("pay.do") -> "② 请点进您的宿舍用电项目(如\"秦汉校区公寓用电\")"
-            url.contains("selectPayProject.do") -> "③ 请选择您的房间, 看到\"剩余电量\"后自动完成绑定"
-            else -> null
+        when {
+            url.contains("open.17wanxiao.com") -> {
+                setStep(0)
+                hintText.text = "用完美校园帐号或校园卡认证登录"
+            }
+            url.contains("bill/type.do") || url.contains("pay.do") -> {
+                setStep(1)
+                hintText.text = "点进宿舍用电项目, 如\"秦汉校区公寓用电\""
+            }
+            url.contains("selectPayProject.do") -> {
+                setStep(2)
+                hintText.text = "选择房间, 显示剩余电量后自动完成绑定"
+            }
         }
-        step?.let { hintText.text = it }
+    }
+
+    /** 步骤条: 已完成打勾, 当前步骤实心主色, 未到的步骤浅色 */
+    private fun setStep(current: Int) {
+        val primary = MaterialColors.getColor(hintText, androidx.appcompat.R.attr.colorPrimary)
+        val onPrimary = MaterialColors.getColor(hintText, com.google.android.material.R.attr.colorOnPrimary)
+        val idle = MaterialColors.getColor(hintText, com.google.android.material.R.attr.colorSurfaceContainerHighest)
+        val onIdle = MaterialColors.getColor(hintText, com.google.android.material.R.attr.colorOnSurfaceVariant)
+        val onSurface = MaterialColors.getColor(hintText, com.google.android.material.R.attr.colorOnSurface)
+        val ids = intArrayOf(R.id.step1, R.id.step2, R.id.step3)
+        for (i in ids.indices) {
+            val step = findViewById<View>(ids[i])
+            val num = step.findViewById<TextView>(R.id.stepNum)
+            val label = step.findViewById<TextView>(R.id.stepLabel)
+            val done = i < current
+            val active = i <= current
+            num.text = if (done) "✓" else (i + 1).toString()
+            num.backgroundTintList = ColorStateList.valueOf(if (active) primary else idle)
+            num.setTextColor(if (active) onPrimary else onIdle)
+            label.text = steps[i]
+            label.setTextColor(if (i == current) onSurface else onIdle)
+        }
+        findViewById<View>(R.id.line1).setBackgroundColor(if (current >= 1) primary else idle)
+        findViewById<View>(R.id.line2).setBackgroundColor(if (current >= 2) primary else idle)
     }
 
     /** 用当前 WebView 会话原生验证一次, 成功则保存绑定 */
@@ -138,6 +193,7 @@ class SetupActivity : AppCompatActivity() {
         if (binding) return
         binding = true
         doneBtn.isEnabled = false
+        doneBtn.text = "正在验证…"
         exec.execute {
             val cookie = CookieManager.getInstance()
                 .getCookie("https://" + PowerApi.HOST + ":" + PowerApi.PORT + "/CloudPayment/")
@@ -146,14 +202,18 @@ class SetupActivity : AppCompatActivity() {
             runOnUiThread {
                 binding = false
                 doneBtn.isEnabled = true
+                doneBtn.text = "已看到剩余电量, 完成绑定"
                 if (r.ok && r.quantity != null) {
                     Prefs.saveBinding(this, payProId, roomVerify, r.roomLabel)
                     Prefs.setCookieSnapshot(this, cookie)
-                    Prefs.setLastQty(this, r.quantity!!.toFloat())
-                    Prefs.setLastCheck(this, System.currentTimeMillis())
+                    Prefs.recordReading(this, r.quantity.toFloat())
                     Toast.makeText(this,
-                        "绑定成功! ${r.roomLabel} 剩余 ${r.quantity}${r.unit}", Toast.LENGTH_LONG).show()
-                    startActivity(android.content.Intent(this, MainActivity::class.java))
+                        "绑定成功 · ${r.roomLabel} 剩余 ${r.quantity}${r.unit}", Toast.LENGTH_LONG).show()
+                    // 首次绑定没有首页在栈里; 重新绑定时首页 onResume 会自动刷新
+                    if (!intent.getBooleanExtra(EXTRA_REBIND, false)) {
+                        startActivity(Intent(this, MainActivity::class.java)
+                            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                    }
                     finish()
                 } else if (r.sessionDead) {
                     hintText.text = "会话无效, 请重新登录后再选择房间"
@@ -172,5 +232,9 @@ class SetupActivity : AppCompatActivity() {
     override fun onDestroy() {
         webView.destroy()
         super.onDestroy()
+    }
+
+    companion object {
+        const val EXTRA_REBIND = "rebind"
     }
 }

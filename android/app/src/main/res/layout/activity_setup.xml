@@ -1,35 +1,78 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/ios_bg"
+    android:background="?attr/colorSurface"
     android:orientation="vertical">
 
-    <!-- 顶部步骤提示条 -->
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        app:title="绑定宿舍" />
+
+    <!-- 三步进度 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/ios_card"
-        android:orientation="vertical">
+        android:gravity="top"
+        android:orientation="horizontal"
+        android:paddingStart="24dp"
+        android:paddingTop="4dp"
+        android:paddingEnd="24dp">
 
-        <TextView
-            android:id="@+id/hintText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:paddingStart="16dp"
-            android:paddingTop="14dp"
-            android:paddingEnd="16dp"
-            android:paddingBottom="14dp"
-            android:text="① 请登录(完美校园帐号或校园卡认证)"
-            android:textColor="@color/ios_label"
-            android:textSize="15sp" />
+        <include
+            android:id="@+id/step1"
+            layout="@layout/item_step" />
 
         <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="@color/ios_separator" />
+            android:id="@+id/line1"
+            android:layout_width="0dp"
+            android:layout_height="2dp"
+            android:layout_marginStart="8dp"
+            android:layout_marginTop="15dp"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1" />
+
+        <include
+            android:id="@+id/step2"
+            layout="@layout/item_step" />
+
+        <View
+            android:id="@+id/line2"
+            android:layout_width="0dp"
+            android:layout_height="2dp"
+            android:layout_marginStart="8dp"
+            android:layout_marginTop="15dp"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1" />
+
+        <include
+            android:id="@+id/step3"
+            layout="@layout/item_step" />
     </LinearLayout>
+
+    <TextView
+        android:id="@+id/hintText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:paddingStart="24dp"
+        android:paddingTop="12dp"
+        android:paddingEnd="24dp"
+        android:paddingBottom="12dp"
+        android:text="用完美校园帐号或校园卡认证登录"
+        android:textAppearance="?attr/textAppearanceBodyMedium"
+        android:textColor="?attr/colorOnSurfaceVariant" />
+
+    <com.google.android.material.progressindicator.LinearProgressIndicator
+        android:id="@+id/progressBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:max="100"
+        app:trackThickness="3dp" />
 
     <WebView
         android:id="@+id/webView"
@@ -37,25 +80,16 @@
         android:layout_height="0dp"
         android:layout_weight="1" />
 
-    <ProgressBar
-        android:id="@+id/progressBar"
-        style="?android:attr/progressBarStyleHorizontal"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:progressTint="@color/ios_orange"
-        android:progressBackgroundTint="@color/ios_fill" />
-
-    <Button
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/doneBtn"
         android:layout_width="match_parent"
-        android:layout_height="52dp"
+        android:layout_height="56dp"
         android:layout_marginStart="16dp"
         android:layout_marginTop="12dp"
         android:layout_marginEnd="16dp"
-        android:layout_marginBottom="16dp"
-        android:background="@drawable/btn_primary"
-        android:text="我已看到剩余电量, 完成绑定"
-        android:textAllCaps="false"
-        android:textColor="#FFFFFF"
-        android:textSize="17sp" />
+        android:layout_marginBottom="12dp"
+        android:text="已看到剩余电量, 完成绑定"
+        android:textAppearance="?attr/textAppearanceTitleMedium"
+        app:icon="@drawable/ic_check"
+        app:iconGravity="textStart" />
 </LinearLayout>

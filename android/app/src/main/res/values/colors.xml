@@ -1,13 +1,42 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- iOS 系统色板 -->
-    <color name="ios_bg">#F2F2F7</color>
-    <color name="ios_card">#FFFFFF</color>
-    <color name="ios_label">#000000</color>
-    <color name="ios_secondary_label">#8E8E93</color>
-    <color name="ios_separator">#C6C6C8</color>
-    <color name="ios_orange">#FF9500</color>
-    <color name="ios_orange_dark">#E6850A</color>
-    <color name="ios_red">#FF3B30</color>
-    <color name="ios_fill">#EFEFF4</color>
+    <!-- 品牌色: 与图标一致 -->
+    <color name="brand_blue">#2A459E</color>
+    <color name="brand_blue_deep">#141F4A</color>
+    <color name="brand_glow">#5B86FF</color>
+    <color name="brand_amber">#FFCC00</color>
+    <color name="brand_amber_deep">#FF9F0A</color>
+
+    <!-- 电量状态 -->
+    <color name="level_ok">#1E8E3E</color>
+    <color name="level_warn">#E37400</color>
+
+    <!-- M3 色板 (中对比度, 蓝色种子): 固定使用, 不随壁纸取色 -->
+    <color name="m3_primary">#2A4174</color>
+    <color name="m3_on_primary">#FFFFFF</color>
+    <color name="m3_primary_container">#5E73A9</color>
+    <color name="m3_on_primary_container">#FFFFFF</color>
+    <color name="m3_secondary">#3C4255</color>
+    <color name="m3_on_secondary">#FFFFFF</color>
+    <color name="m3_secondary_container">#6E7488</color>
+    <color name="m3_on_secondary_container">#FFFFFF</color>
+    <color name="m3_tertiary">#553A55</color>
+    <color name="m3_on_tertiary">#FFFFFF</color>
+    <color name="m3_tertiary_container">#8A6A89</color>
+    <color name="m3_on_tertiary_container">#FFFFFF</color>
+    <color name="m3_error">#8C0009</color>
+    <color name="m3_on_error">#FFFFFF</color>
+    <color name="m3_error_container">#DA342E</color>
+    <color name="m3_on_error_container">#FFFFFF</color>
+    <color name="m3_surface">#FAF8FF</color>
+    <color name="m3_on_surface">#1A1B20</color>
+    <color name="m3_surface_variant">#E1E2EC</color>
+    <color name="m3_on_surface_variant">#40434B</color>
+    <color name="m3_outline">#5D5F67</color>
+    <color name="m3_outline_variant">#797A83</color>
+    <color name="m3_surface_container_lowest">#FFFFFF</color>
+    <color name="m3_surface_container_low">#F4F3FA</color>
+    <color name="m3_surface_container">#EEEDF4</color>
+    <color name="m3_surface_container_high">#E8E7EF</color>
+    <color name="m3_surface_container_highest">#E2E2E9</color>
 </resources>

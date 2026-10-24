@@ -31,7 +31,7 @@ hvigorw assembleHap --mode module -p product=default
 
 ## 安装（侧载）
 
-Releases 里提供的是**未签名 HAP**（`XZMUPower-v1.0.0-harmonyos-unsigned.hap`）。
+Releases 里提供的是**未签名 HAP**（`XZMUPower-v1.1.0-harmonyos-unsigned.hap`）。
 鸿蒙安装 HAP 必须有签名，请自行侧载，常用方式：
 
 1. DevEco Studio 打开本工程 → File → Project Structure → Signing Configs →

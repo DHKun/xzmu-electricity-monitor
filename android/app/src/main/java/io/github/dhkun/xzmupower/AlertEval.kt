@@ -5,9 +5,8 @@ import android.content.Context
 /** 阈值评估: 手动查询、修改阈值、后台定时三条路径共用, 保证告警行为一致 */
 object AlertEval {
 
-    /** 用一次查询结果做阈值判断(仅在 ok 且 quantity 有效时调用) */
+    /** 用一次查询结果做阈值判断(仅在 ok 且 quantity 有效时调用); 读数由 Prefs.recordReading 落盘 */
     fun evaluate(ctx: Context, quantity: Double, unit: String) {
-        Prefs.setLastQty(ctx, quantity.toFloat())
         val threshold = Prefs.threshold(ctx)
         if (quantity < threshold) {
             if (!Prefs.alerted(ctx)) {
