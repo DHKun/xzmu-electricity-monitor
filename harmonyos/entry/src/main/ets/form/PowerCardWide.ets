@@ -1,6 +1,6 @@
 let wideStorage = new LocalStorage();
 
-/** 2×4 卡片: 左侧环形仪表, 右侧状态与刷新 */
+/** 2×4 卡片: 左侧圆环, 右侧状态与刷新 */
 @Entry(wideStorage)
 @Component
 struct PowerCardWide {
@@ -24,7 +24,7 @@ struct PowerCardWide {
     if (this.level === 1) {
       return $r('app.color.power_green');
     }
-    return $r('app.color.power_accent');
+    return $r('app.color.power_gray');
   }
 
   levelText(): string {
@@ -43,17 +43,17 @@ struct PowerCardWide {
   @Builder
   unbound() {
     Row({ space: 14 }) {
-      SymbolGlyph($r('sys.symbol.house_fill'))
-        .fontSize(40)
-        .fontColor([$r('app.color.power_accent')])
+      SymbolGlyph($r('sys.symbol.bolt_fill'))
+        .fontSize(44)
+        .fontColor([$r('app.color.power_amber')])
       Column({ space: 4 }) {
         Text('尚未绑定宿舍')
-          .fontSize(16)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.power_label'))
+          .fontSize(17)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.hero_label'))
         Text('轻点打开 App, 登录后选择房间即可')
           .fontSize(12)
-          .fontColor($r('app.color.power_secondary'))
+          .fontColor($r('app.color.hero_secondary'))
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
@@ -64,52 +64,55 @@ struct PowerCardWide {
 
   @Builder
   bound() {
-    Row({ space: 14 }) {
-      Gauge({ value: this.pct, min: 0, max: 100 }) {
+    Row({ space: 16 }) {
+      Stack() {
+        Progress({ value: this.pct, total: 100, type: ProgressType.Ring })
+          .width(108)
+          .height(108)
+          .color($r('app.color.power_amber'))
+          .backgroundColor($r('app.color.hero_fill'))
+          .style({ strokeWidth: 10 })
         Column() {
           Text(this.qty)
             .fontSize(26)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.power_label'))
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.hero_label'))
             .maxLines(1)
           Text('度')
             .fontSize(11)
-            .fontColor($r('app.color.power_secondary'))
+            .fontColor($r('app.color.hero_secondary'))
         }
-        .width('100%')
-        .height('100%')
-        .justifyContent(FlexAlign.Center)
       }
-      .startAngle(225)
-      .endAngle(135)
-      .colors(this.levelColor())
-      .strokeWidth(9)
-      .indicator(null)
-      .width(110)
-      .height(110)
 
       Column() {
         Row({ space: 4 }) {
           SymbolGlyph($r('sys.symbol.bolt_fill'))
             .fontSize(14)
-            .fontColor([this.levelColor()])
+            .fontColor([$r('app.color.power_amber')])
           Text(this.room)
             .fontSize(13)
-            .fontColor($r('app.color.power_secondary'))
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.hero_secondary'))
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .layoutWeight(1)
         }
         .width('100%')
 
-        Text(this.levelText())
-          .fontSize(18)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.levelColor())
-          .margin({ top: 8 })
+        Row({ space: 6 }) {
+          Circle()
+            .width(8)
+            .height(8)
+            .fill(this.levelColor())
+          Text(this.levelText())
+            .fontSize(18)
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.hero_label'))
+        }
+        .margin({ top: 10 })
         Text(this.sub)
           .fontSize(12)
-          .fontColor($r('app.color.power_secondary'))
+          .fontColor($r('app.color.hero_secondary'))
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .margin({ top: 2 })
@@ -119,7 +122,7 @@ struct PowerCardWide {
         Row() {
           Text(this.time.length > 0 ? `${this.time} 更新` : '')
             .fontSize(11)
-            .fontColor($r('app.color.power_tertiary'))
+            .fontColor($r('app.color.hero_tertiary'))
             .layoutWeight(1)
           FormLink({
             action: 'message',
@@ -130,18 +133,19 @@ struct PowerCardWide {
                 LoadingProgress()
                   .width(14)
                   .height(14)
-                  .color($r('app.color.power_accent'))
+                  .color($r('app.color.hero_label'))
               } else {
                 SymbolGlyph($r('sys.symbol.arrow_clockwise'))
-                  .fontSize(13)
-                  .fontColor([$r('app.color.power_accent')])
+                  .fontSize(12)
+                  .fontColor([$r('app.color.hero_label')])
               }
               Text(this.busy ? '刷新中' : '刷新')
                 .fontSize(12)
-                .fontColor($r('app.color.power_accent'))
+                .fontWeight(FontWeight.Medium)
+                .fontColor($r('app.color.hero_label'))
             }
             .padding({ left: 10, right: 10, top: 5, bottom: 5 })
-            .backgroundColor($r('app.color.power_accent_soft'))
+            .backgroundColor($r('app.color.hero_fill'))
             .borderRadius(14)
           }
         }
@@ -165,11 +169,10 @@ struct PowerCardWide {
     }
     .width('100%')
     .height('100%')
-    .padding(14)
-    .backgroundColor($r('app.color.power_card'))
+    .padding(16)
     .linearGradient({
-      angle: 120,
-      colors: [[$r('app.color.power_glow'), 0], [$r('app.color.power_card'), 0.6]]
+      angle: 135,
+      colors: [[$r('app.color.hero_start'), 0], [$r('app.color.hero_end'), 1]]
     })
     .onClick(() => {
       postCardAction(this, {

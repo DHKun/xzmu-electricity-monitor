@@ -24,22 +24,22 @@ struct PowerCard {
     if (this.level === 1) {
       return $r('app.color.power_green');
     }
-    return $r('app.color.power_accent');
+    return $r('app.color.power_gray');
   }
 
   @Builder
   unbound() {
     Column({ space: 6 }) {
-      SymbolGlyph($r('sys.symbol.house_fill'))
-        .fontSize(30)
-        .fontColor([$r('app.color.power_accent')])
+      SymbolGlyph($r('sys.symbol.bolt_fill'))
+        .fontSize(32)
+        .fontColor([$r('app.color.power_amber')])
       Text('尚未绑定宿舍')
-        .fontSize(14)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.power_label'))
+        .fontSize(15)
+        .fontWeight(FontWeight.Bold)
+        .fontColor($r('app.color.hero_label'))
       Text('轻点打开 App 绑定')
         .fontSize(11)
-        .fontColor($r('app.color.power_secondary'))
+        .fontColor($r('app.color.hero_secondary'))
     }
     .width('100%')
     .height('100%')
@@ -52,10 +52,11 @@ struct PowerCard {
       Row({ space: 4 }) {
         SymbolGlyph($r('sys.symbol.bolt_fill'))
           .fontSize(14)
-          .fontColor([this.levelColor()])
+          .fontColor([$r('app.color.power_amber')])
         Text(this.room)
           .fontSize(12)
-          .fontColor($r('app.color.power_secondary'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.hero_secondary'))
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .layoutWeight(1)
@@ -67,11 +68,11 @@ struct PowerCard {
             LoadingProgress()
               .width(18)
               .height(18)
-              .color($r('app.color.power_accent'))
+              .color($r('app.color.hero_label'))
           } else {
             SymbolGlyph($r('sys.symbol.arrow_clockwise'))
-              .fontSize(16)
-              .fontColor([$r('app.color.power_secondary')])
+              .fontSize(15)
+              .fontColor([$r('app.color.hero_secondary')])
           }
         }
         .width(28)
@@ -83,13 +84,14 @@ struct PowerCard {
 
       Row({ space: 3 }) {
         Text(this.qty)
-          .fontSize(36)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.power_label'))
+          .fontSize(38)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.hero_label'))
           .maxLines(1)
         Text('度')
-          .fontSize(13)
-          .fontColor($r('app.color.power_secondary'))
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.hero_secondary'))
           .margin({ bottom: 7 })
       }
       .alignItems(VerticalAlign.Bottom)
@@ -97,21 +99,25 @@ struct PowerCard {
       Progress({ value: this.pct, total: 100, type: ProgressType.Linear })
         .width('100%')
         .height(6)
-        .color(this.levelColor())
-        .backgroundColor($r('app.color.power_track'))
+        .color($r('app.color.power_amber'))
+        .backgroundColor($r('app.color.hero_fill'))
         .style({ strokeWidth: 6, strokeRadius: 3 })
         .margin({ top: 6 })
 
-      Row() {
+      Row({ space: 5 }) {
+        Circle()
+          .width(6)
+          .height(6)
+          .fill(this.levelColor())
         Text(this.sub)
           .fontSize(11)
-          .fontColor($r('app.color.power_secondary'))
+          .fontColor($r('app.color.hero_secondary'))
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .layoutWeight(1)
         Text(this.time)
           .fontSize(10)
-          .fontColor($r('app.color.power_tertiary'))
+          .fontColor($r('app.color.hero_tertiary'))
       }
       .width('100%')
       .margin({ top: 8 })
@@ -132,10 +138,9 @@ struct PowerCard {
     .width('100%')
     .height('100%')
     .padding(14)
-    .backgroundColor($r('app.color.power_card'))
     .linearGradient({
-      angle: 160,
-      colors: [[$r('app.color.power_glow'), 0], [$r('app.color.power_card'), 0.7]]
+      angle: 135,
+      colors: [[$r('app.color.hero_start'), 0], [$r('app.color.hero_end'), 1]]
     })
     .onClick(() => {
       postCardAction(this, {

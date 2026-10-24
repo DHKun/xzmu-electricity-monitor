@@ -1,6 +1,5 @@
 import { common } from '@kit.AbilityKit';
 import { webview } from '@kit.ArkWeb';
-import { HdsNavDestination, HdsNavDestinationAttribute, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
 import { Prefs } from '../service/Prefs';
 import { PowerApi, queryUrl, RoomState } from '../service/PowerApi';
 import { CardSync } from '../service/PowerSync';
@@ -294,7 +293,7 @@ export struct SetupPage {
   }
 
   build() {
-    HdsNavDestination() {
+    NavDestination() {
       Column() {
         Column({ space: 10 }) {
           this.stepBar()
@@ -401,12 +400,7 @@ export struct SetupPage {
       .height('100%')
       .padding({ left: 0, right: 0 })
     }
-    .titleBar({
-      content: {
-        title: { mainTitle: '绑定宿舍' }
-      }
-    })
-    .titleMode(HdsNavDestinationTitleMode.MINI)
+    .title('绑定宿舍', { backgroundColor: $r('app.color.power_bg') })
     .backgroundColor($r('app.color.power_bg'))
     .onReady((ctx: NavDestinationContext) => {
       this.stack = ctx.pathStack;
