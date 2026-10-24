@@ -33,6 +33,9 @@ class SetupActivity : AppCompatActivity() {
     private var pendingPayProId: String? = null
     private var pendingRoomVerify: String? = null
     private var binding = false
+    private var lastAttemptKey: String? = null
+    private var lastAttemptAt = 0L
+    private var forceLoginTried = false
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -60,7 +63,16 @@ class SetupActivity : AppCompatActivity() {
             override fun onPageFinished(view: WebView, url: String) {
                 progressBar.visibility = View.GONE
                 updateHint(url)
-                if (url.contains("api/authorize")) injectSchoolSearch(view)
+                if (url.contains("api/authorize")) {
+                    injectSchoolSearch(view)
+                    // "提示"页 = 会话失效错误页, 自动降级到强制登录
+                    view.evaluateJavascript("document.title") { title ->
+                        if (title?.contains("提示") == true && !forceLoginTried) {
+                            forceLoginTried = true
+                            runOnUiThread { webView.loadUrl(PowerApi.AUTHORIZE_URL_FORCE) }
+                        }
+                    }
+                }
             }
         }
         webView.webChromeClient = object : android.webkit.WebChromeClient() {
@@ -84,20 +96,25 @@ class SetupActivity : AppCompatActivity() {
         } catch (_: Exception) { }
     }
 
-    /** 从拦截到的请求里找 getRoomState.do, 提取绑定参数 */
+    /** 从拦截到的请求里找 getRoomState.do, 提取绑定参数。
+     *  注意: shouldInterceptRequest 在 WebView 后台线程回调, UI 操作必须切主线程 */
     private fun intercept(uri: Uri) {
         if (binding) return
         if (!uri.toString().contains("getRoomState.do")) return
         val payProId = uri.getQueryParameter("payProId") ?: return
         val roomVerify = uri.getQueryParameter("roomverify") ?: return
-        if (payProId == pendingPayProId && roomVerify == pendingRoomVerify) return
+        val key = "$payProId|$roomVerify"
+        // 同一参数 5 秒内只自动验证一次, 防止页面重试刷爆
+        if (key == lastAttemptKey && System.currentTimeMillis() - lastAttemptAt < 5000) return
+        lastAttemptKey = key
+        lastAttemptAt = System.currentTimeMillis()
         pendingPayProId = payProId
         pendingRoomVerify = roomVerify
         runOnUiThread {
             hintText.text = "检测到房间 $roomVerify, 正在验证会话…"
             Toast.makeText(this, "检测到房间, 验证中…", Toast.LENGTH_SHORT).show()
+            tryFinish()
         }
-        tryFinish()
     }
 
     private fun updateHint(url: String) {
@@ -122,7 +139,8 @@ class SetupActivity : AppCompatActivity() {
         binding = true
         doneBtn.isEnabled = false
         exec.execute {
-            val cookie = CookieManager.getInstance().getCookie("https://" + PowerApi.HOST)
+            val cookie = CookieManager.getInstance()
+                .getCookie("https://" + PowerApi.HOST + ":" + PowerApi.PORT + "/CloudPayment/")
             val r = PowerApi.queryUrl(this, PowerApi.roomStateUrl(payProId, roomVerify),
                 cookie ?: "", PowerApi.referer(payProId))
             runOnUiThread {

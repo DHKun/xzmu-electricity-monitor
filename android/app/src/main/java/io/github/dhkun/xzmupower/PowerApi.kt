@@ -15,14 +15,19 @@ object PowerApi {
     const val SCHOOL_CODE = "784" // 西藏民族大学
     const val CLIENT_ID = "513214c26445440fb9167a7159d9258b"
 
-    /** OAuth 登录入口: force_login=true 使无会话时展示登录页 */
-    val AUTHORIZE_URL: String = run {
+    /** OAuth 登录入口: 无会话时展示登录页; 会话有效时自动完成授权 */
+    val AUTHORIZE_URL: String = authorizeUrl("false")
+
+    /** 强制重新登录(会话存在但需要换账号/彻底过期时的兜底) */
+    val AUTHORIZE_URL_FORCE: String = authorizeUrl("true")
+
+    private fun authorizeUrl(forceLogin: String): String = run {
         val redirect = "https://$HOST:$PORT/CloudPayment/user/pay.do" +
                 "?ecardFunc=index&paychannel=35&payUserSource=WX" +
                 "&flag=basicopengroup_xzmzjf&hostType=OPEN_NEWCAP" +
                 "&appId=$CLIENT_ID&versioncode=10431102&customer_code=$SCHOOL_CODE"
         "https://open.17wanxiao.com/api/authorize?response_type=code&hidden=true" +
-                "&customerCode=$SCHOOL_CODE&force_login=true" +
+                "&customerCode=$SCHOOL_CODE&force_login=$forceLogin" +
                 "&redirect_uri=" + URLEncoder.encode(redirect, "UTF-8") +
                 "&client_id=$CLIENT_ID"
     }
@@ -49,12 +54,13 @@ object PowerApi {
         val setCookie: String?,   // 响应中的新 Cookie(如有), 用于续期
     )
 
-    /** 从 WebView CookieManager 取会话 Cookie, 失败时回退到快照 */
+    /** 从 WebView CookieManager 取会话 Cookie, 失败时回退到快照。
+     *  注意 SESSION 的 Path=/CloudPayment/, getCookie 的 URL 必须带上这个路径才能取到 */
     fun sessionCookie(ctx: Context): String? {
         CookieManager.getInstance().apply { setAcceptCookie(true); flush() }
-        val live = CookieManager.getInstance().getCookie("https://$HOST")
-        if (!live.isNullOrBlank()) return live
-        return Prefs.cookieSnapshot(ctx)?.takeIf { it.isNotBlank() }
+        val live = CookieManager.getInstance().getCookie("https://$HOST:$PORT/CloudPayment/")
+        if (!live.isNullOrBlank() && live.contains("SESSION=")) return live
+        return Prefs.cookieSnapshot(ctx)?.takeIf { it.isNotBlank() && it.contains("SESSION=") }
     }
 
     /** 查询剩余电量。阻塞, 需在工作线程调用。 */
