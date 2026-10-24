@@ -1,0 +1,10 @@
+{
+  "modelVersion": "26.0.0",
+  "name": "xzmupower",
+  "version": "1.0.0",
+  "description": "XZMU dorm electricity monitor",
+  "main": "",
+  "author": "DHKun",
+  "license": "MIT",
+  "dependencies": {}
+}

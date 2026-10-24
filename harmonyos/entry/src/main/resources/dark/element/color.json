@@ -1,0 +1,12 @@
+{
+  "color": [
+    { "name": "power_bg", "value": "#000000" },
+    { "name": "power_card", "value": "#1C1C1E" },
+    { "name": "power_label", "value": "#FFFFFF" },
+    { "name": "power_secondary", "value": "#98989E" },
+    { "name": "power_separator", "value": "#38383A" },
+    { "name": "power_orange", "value": "#FF9F0A" },
+    { "name": "power_red", "value": "#FF453A" },
+    { "name": "power_fill", "value": "#2C2C2E" }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "forms": [
+    {
+      "name": "PowerCard",
+      "displayName": "$string:app_name",
+      "description": "宿舍剩余电量卡片",
+      "src": "./ets/form/PowerCard.ets",
+      "uiSyntax": "arkts",
+      "window": { "designWidth": 720 },
+      "colorMode": "auto",
+      "isDefault": true,
+      "updateEnabled": true,
+      "scheduledUpdateTime": "06:00",
+      "updateDuration": 2,
+      "defaultDimension": "2*2",
+      "supportDimensions": ["2*2"]
+    }
+  ]
+}

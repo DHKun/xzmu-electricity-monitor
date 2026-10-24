@@ -1,0 +1,9 @@
+{
+  "string": [
+    { "name": "app_name", "value": "XZMU电费" },
+    { "name": "module_desc", "value": "宿舍电费监控主模块" },
+    { "name": "ability_desc", "value": "主界面" },
+    { "name": "form_desc", "value": "电量服务卡片" },
+    { "name": "worker_desc", "value": "后台定时查询" }
+  ]
+}

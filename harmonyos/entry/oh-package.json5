@@ -1,0 +1,10 @@
+{
+  "modelVersion": "26.0.0",
+  "name": "entry",
+  "version": "1.0.0",
+  "description": "entry module",
+  "main": "",
+  "author": "DHKun",
+  "license": "MIT",
+  "dependencies": {}
+}

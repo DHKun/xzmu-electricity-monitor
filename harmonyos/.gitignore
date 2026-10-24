@@ -1,0 +1,8 @@
+build/
+oh_modules/
+.hvigor/
+*/build/
+*/oh_modules/
+*/.hvigor/
+local.properties
+**/.preview/
