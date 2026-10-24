@@ -24,15 +24,14 @@ hvigorw assembleHap --mode module -p product=default
 # 产物: entry/build/default/outputs/default/entry-default-unsigned.hap
 ```
 
-## 安装（需要签名）
+## 安装（侧载）
 
-HAP 必须签名后才能安装到真机/模拟器：
+Releases 里提供的是**未签名 HAP**（`XZMUPower-v1.0.0-harmonyos-unsigned.hap`）。
+鸿蒙安装 HAP 必须有签名，请自行侧载，常用方式：
 
-1. 在 [AppGallery Connect](https://developer.huawei.com/consumer/cn/service/josp/agc/index.html)
-   创建应用并生成调试证书(.p12 + .cer + .p7b)
-2. 在 `build-profile.json5` 的 `signingConfigs` 里配置签名材料
-3. 重新执行 `hvigorw assembleHap` 得到已签名 HAP
-4. 安装: `hdc install entry-default-signed.hap`
+1. DevEco Studio 打开本工程 → File → Project Structure → Signing Configs →
+   勾选 Automatically generate signature（登录自己的华为账号，免费）→
+   重新 `hvigorw assembleHap` 得到已签名 HAP → `hdc install`
+2. 或用社区侧载/自签名工具对未签名 HAP 重签后安装
 
-DevEco Studio 用户也可以直接 File → Project Structure → Signing Configs 勾选
-"Automatically generate signature"（需华为开发者账号登录）。
+不提供、也不背书任何签名材料。
