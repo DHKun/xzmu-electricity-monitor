@@ -60,6 +60,7 @@ class SetupActivity : AppCompatActivity() {
             override fun onPageFinished(view: WebView, url: String) {
                 progressBar.visibility = View.GONE
                 updateHint(url)
+                if (url.contains("api/authorize")) injectSchoolSearch(view)
             }
         }
         webView.webChromeClient = object : android.webkit.WebChromeClient() {
@@ -71,6 +72,16 @@ class SetupActivity : AppCompatActivity() {
 
         doneBtn.setOnClickListener { tryFinish() }
         webView.loadUrl(PowerApi.AUTHORIZE_URL)
+    }
+
+    /** 登录页: 把"选择学校"下拉换成可搜索的弹层。脚本可安全重入, 选项延迟加载时靠重跑兜底 */
+    private fun injectSchoolSearch(view: WebView) {
+        try {
+            val js = assets.open("school_search.js").bufferedReader().use { it.readText() }
+            view.evaluateJavascript(js, null)
+            view.postDelayed({ view.evaluateJavascript(js, null) }, 1200)
+            view.postDelayed({ view.evaluateJavascript(js, null) }, 3000)
+        } catch (_: Exception) { }
     }
 
     /** 从拦截到的请求里找 getRoomState.do, 提取绑定参数 */
