@@ -206,6 +206,33 @@ export class Prefs {
     sp.putSync('samples', kept.map((x: Sample) => `${x.at}:${x.qty}`).join(','));
   }
 
+  /** 调试构建专用: 写入一套示例数据, 便于在模拟器上不登录就查看已绑定界面 */
+  static async seedDemo(): Promise<void> {
+    const now: number = Date.now();
+    const h: number = 3600000;
+    // 近 7 天每 6 小时一个读数, 中间有一次充值
+    const qtys: number[] = [62, 59, 55, 52, 49, 46, 42, 38, 300, 297, 293, 289, 286, 282, 277, 273,
+      270, 266, 262, 259, 256, 252, 248, 244];
+    const parts: string[] = [];
+    for (let i = 0; i < qtys.length; i++) {
+      parts.push(`${now - (qtys.length - 1 - i) * 6 * h}:${qtys[i]}`);
+    }
+    await Prefs.write((sp: preferences.Preferences) => {
+      sp.putSync('configured', true);
+      sp.putSync('payProId', '3148');
+      sp.putSync('roomVerify', '101-1--9-902');
+      sp.putSync('roomLabel', '902房间');
+      sp.putSync('cookieSnapshot', 'SESSION=demo');
+      sp.putSync('threshold', 20.0);
+      sp.putSync('lastQty', 244.0);
+      sp.putSync('peakQty', 300.0);
+      sp.putSync('lastAt', now);
+      sp.putSync('sessionDead', false);
+      sp.putSync('alerted', false);
+      sp.putSync('samples', parts.join(','));
+    });
+  }
+
   static async setAlerted(v: boolean): Promise<void> {
     await Prefs.write((sp: preferences.Preferences) => sp.putSync('alerted', v));
   }

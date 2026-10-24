@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "XZMUPower"
+rootProject.name = "MinDaPower"
 include(":app")

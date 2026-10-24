@@ -1,17 +1,24 @@
-# XZMU电费 · HarmonyOS 版 (API 26 / 鸿蒙7)
+# 民大电费 · HarmonyOS 版 (API 26 / 鸿蒙7)
 
 与安卓版功能一致：内嵌页登录绑定 → 查询剩余电量 → 低电量通知。
 
 ## 鸿蒙特性
 
-- **iOS 风格界面**：分组列表、彩色圆角图标、深蓝渐变主卡 + 琥珀色圆环；
-  `Navigation` Free 模式大标题随滚动收起，绑定页为 `NavDestination` 子页面
-- **电量统计**：圆环以上次充值后的最高读数为满格；根据历史读数估算日均用电和
-  预计可用天数；数字变化有翻牌动效
-- **互动服务卡片**：2×2（读数 + 进度条）和 2×4（圆环），卡片上的刷新按钮通过
-  `FormLink(message)` 在卡片进程直接查询，不用打开 App；App 内可一键拉起"添加卡片"面板
+- **「天气」风格首页**：整屏天空渐变随电量变化（充足蓝天 / 偏低黄昏 / 不足暮红，深色模式为夜空），
+  大号细体读数，毛玻璃卡片展示近 7 天用电柱状图、余量、日均用电、预计用完日期、提醒阈值
+- **「设置」风格设置页**：系统色 token、分组圆角列表、彩色圆形图标、原生 `Toggle`
+- **一多适配**：`GridRow` 断点布局，平板横屏左右两栏，竖屏/手机单列；设置页居中限宽；
+  跟随系统旋转（`auto_rotation_restricted`）
+- **互动服务卡片**：2×2（读数 + 进度条）和 2×4（圆环），背景与首页同一套天空渐变；
+  卡片上的刷新按钮通过 `FormLink(message)` 在卡片进程直接查询，不用打开 App
 - **WorkScheduler 后台轮询**：约每 2 小时由系统择机查询，结果同步到通知和所有桌面卡片
-- 下拉刷新、系统 Symbol 图标、低电量通知（未授权时跳转系统通知设置）、深浅色跟随系统
+- 下拉刷新、系统 Symbol 图标、数字翻牌动效、低电量通知（未授权时跳转系统通知设置）
+
+调试构建可以用示例数据直接查看已绑定界面（发布构建不生效）：
+
+```bash
+hdc shell aa start -a EntryAbility -b io.github.dhkun.xzmupower --pb xzmu.demo true
+```
 
 > 卡片和后台任务运行在独立进程，拿不到 WebView 会话，用的是绑定或上次成功查询时保存的
 > Cookie 快照。服务端会话过期后，卡片会显示"登录已过期"，打开 App 重新绑定即可恢复。
@@ -25,13 +32,13 @@ export DEVECO_SDK_HOME=<工具链目录>/sdk
 export PATH=<工具链目录>/bin:<工具链目录>/tool/node/bin:$PATH
 cd harmonyos
 ohpm install
-hvigorw assembleHap --mode module -p product=default
+hvigorw assembleHap --mode module -p product=default -p buildMode=release
 # 产物: entry/build/default/outputs/default/entry-default-unsigned.hap
 ```
 
 ## 安装（侧载）
 
-Releases 里提供的是**未签名 HAP**（`XZMUPower-v1.1.0-harmonyos-unsigned.hap`）。
+Releases 里提供的是**未签名 HAP**（`MinDaPower-v1.2.0-harmonyos-unsigned.hap`）。
 鸿蒙安装 HAP 必须有签名，请自行侧载，常用方式：
 
 1. DevEco Studio 打开本工程 → File → Project Structure → Signing Configs →

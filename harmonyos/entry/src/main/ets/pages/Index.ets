@@ -1,41 +1,48 @@
-import { common, Want } from '@kit.AbilityKit';
-import { SymbolGlyphModifier } from '@kit.ArkUI';
-import { formProvider } from '@kit.FormKit';
+import { common } from '@kit.AbilityKit';
+import { uiObserver } from '@kit.ArkUI';
 import { notificationManager } from '@kit.NotificationKit';
 import { Prefs } from '../service/Prefs';
 import { PowerApi, RoomState } from '../service/PowerApi';
-import { AlertEval } from '../service/AlertEval';
 import { PowerSync } from '../service/PowerSync';
-import { PowerLevel, PowerStatus, PowerView } from '../service/PowerStatus';
+import { DayUse, PowerLevel, PowerStatus, PowerView } from '../service/PowerStatus';
+import { DATA_VERSION, pickThreshold, requestNotify } from './Actions';
+import { setStatusBarLight } from './SystemBar';
 import { SetupPage } from './Setup';
+import { SettingsPage } from './Settings';
 
-const THRESHOLDS: string[] = ['5', '10', '15', '20', '30', '50', '80', '100'];
-
-/** 圆环: 琥珀色渐变, 与图标闪电同色 */
-const RING_GRADIENT: LinearGradient = new LinearGradient([
-  { color: $r('app.color.power_amber'), offset: 0 },
-  { color: $r('app.color.power_amber_deep'), offset: 1 }
-]);
-
+/** 首页: 仿「天气」, 整屏天空渐变随电量变化, 下方毛玻璃卡片; 平板横屏左右两栏 */
 @Entry
 @Component
 struct Index {
   private pathStack: NavPathStack = new NavPathStack();
+  @StorageProp(DATA_VERSION) @Watch('onDataChanged') dataVersion: number = 0;
   @State view: PowerView = new PowerView();
   @State refreshing: boolean = false;
   @State querying: boolean = false;
   @State statusText: string = '';
-  @State notifyOn: boolean = true;
+  @State bp: string = 'sm';
+  private notifyOn: boolean = true;
   private scroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
     Prefs.init(this.getUIContext().getHostContext() as common.UIAbilityContext);
     this.reload();
+    // 子页面显示时状态栏用深色字, 全部退回首页后恢复白字
+    this.getUIContext().getUIObserver().on('navDestinationUpdate', (info: uiObserver.NavDestinationInfo) => {
+      if (info.state === uiObserver.NavDestinationState.ON_SHOWN) {
+        setStatusBarLight(this.getUIContext(), false);
+      } else if (info.state === uiObserver.NavDestinationState.ON_HIDDEN && this.pathStack.size() === 0) {
+        setStatusBarLight(this.getUIContext(), true);
+      }
+    });
   }
 
   onPageShow(): void {
     this.reload();
-    this.checkNotify();
+    setStatusBarLight(this.getUIContext(), true);
+    notificationManager.isNotificationEnabled().then((on: boolean) => {
+      this.notifyOn = on;
+    }).catch(() => {});
     if (this.view.configured && Date.now() - this.view.lastAt > 60 * 1000) {
       this.query();
     }
@@ -46,10 +53,13 @@ struct Index {
     this.view = PowerStatus.load();
   }
 
-  checkNotify(): void {
-    notificationManager.isNotificationEnabled().then((on: boolean) => {
-      this.notifyOn = on;
-    }).catch(() => {});
+  /** 设置页或绑定页改了数据; 首次绑定成功后顺带申请通知权限 */
+  onDataChanged(): void {
+    const wasConfigured: boolean = this.view.configured;
+    this.reload();
+    if (!wasConfigured && this.view.configured && !this.notifyOn) {
+      requestNotify(this.getUIContext(), false, () => {});
+    }
   }
 
   query(): void {
@@ -66,9 +76,7 @@ struct Index {
       // WebView 内核未就绪时拿不到实时会话, 用快照
     }
     PowerSync.syncNow(live).then((r: RoomState) => {
-      if (r.sessionDead) {
-        this.statusText = '登录已过期, 请重新绑定以恢复查询';
-      } else if (!r.ok) {
+      if (!r.ok && !r.sessionDead) {
         this.statusText = `查询失败: ${r.message}`;
       }
       this.finishQuery();
@@ -84,459 +92,413 @@ struct Index {
     this.reload();
   }
 
-  openSetup(): void {
-    // Setup 绑定成功后 pop('bound') 才会回调; 首次绑定顺带申请通知权限
-    this.pathStack.pushPath(new NavPathInfo('setup', '', (info: PopInfo) => {
-      this.reload();
-      if (!this.notifyOn) {
-        this.requestNotify();
-      }
-    }));
+  push(name: string): void {
+    this.pathStack.pushPath(new NavPathInfo(name, ''));
   }
 
-  pickThreshold(): void {
-    const current: string = String(this.view.threshold);
-    const idx: number = THRESHOLDS.indexOf(current);
-    this.getUIContext().showTextPickerDialog({
-      range: THRESHOLDS.map((t: string) => `${t} 度`),
-      selected: idx >= 0 ? idx : 3,
-      onAccept: (v: TextPickerResult) => {
-        const i: number = typeof v.index === 'number' ? v.index : 3;
-        const val: number = Number(THRESHOLDS[i]);
-        Prefs.setThreshold(val).then(() => {
-          AlertEval.reevaluateWithLast();
-          this.reload();
-        });
-      }
-    });
-  }
-
-  /**
-   * 未授权时先弹系统授权框; 被拒绝过或系统不再弹框时 requestEnableNotification 会直接失败,
-   * 这时跳到本应用的通知设置页. 已开启时点按也进设置页, 方便关闭.
-   */
-  requestNotify(): void {
-    const ctx: common.UIAbilityContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    if (this.notifyOn) {
-      this.openNotifySettings(ctx);
-      return;
-    }
-    notificationManager.requestEnableNotification(ctx).then(() => {
-      this.checkNotify();
-    }).catch(() => {
-      this.openNotifySettings(ctx);
-    });
-  }
-
-  openNotifySettings(ctx: common.UIAbilityContext): void {
-    notificationManager.openNotificationSettings(ctx).then(() => {
-      this.checkNotify();
-    }).catch(() => {
-      this.getUIContext().getPromptAction().showToast({ message: '请在 设置 → 通知和状态栏 中允许 XZMU电费 通知' });
-    });
-  }
-
-  /** 拉起系统"添加卡片"面板 */
-  addCard(): void {
-    const want: Want = {
-      bundleName: 'io.github.dhkun.xzmupower',
-      abilityName: 'EntryFormAbility',
-      parameters: {
-        'ohos.extra.param.key.form_dimension': 2,
-        'ohos.extra.param.key.form_name': 'PowerCard',
-        'ohos.extra.param.key.module_name': 'entry'
-      }
-    };
-    try {
-      formProvider.openFormManager(want);
-    } catch (e) {
-      this.getUIContext().getPromptAction().showToast({ message: '请在桌面双指捏合 → 服务卡片中添加' });
-    }
-  }
-
-  levelColor(level: PowerLevel): ResourceColor {
-    switch (level) {
-      case PowerLevel.LOW:
-        return $r('app.color.power_red');
-      case PowerLevel.WARN:
-        return $r('app.color.power_orange');
+  skyTop(): ResourceColor {
+    switch (this.view.level) {
       case PowerLevel.OK:
-        return $r('app.color.power_green');
+        return $r('app.color.sky_ok_top');
+      case PowerLevel.WARN:
+        return $r('app.color.sky_warn_top');
+      case PowerLevel.LOW:
+        return $r('app.color.sky_low_top');
       default:
-        return $r('app.color.power_gray');
+        return $r('app.color.sky_none_top');
     }
   }
 
-  titleInfo(): NavigationCommonTitle {
-    const t: NavigationCommonTitle = {
-      main: '宿舍电费',
-      sub: this.view.configured ? (this.view.room.length > 0 ? this.view.room : '已绑定') : '尚未绑定'
-    };
-    return t;
+  skyBottom(): ResourceColor {
+    switch (this.view.level) {
+      case PowerLevel.OK:
+        return $r('app.color.sky_ok_bottom');
+      case PowerLevel.WARN:
+        return $r('app.color.sky_warn_bottom');
+      case PowerLevel.LOW:
+        return $r('app.color.sky_low_bottom');
+      default:
+        return $r('app.color.sky_none_bottom');
+    }
+  }
+
+  /** "电量充足 · 约可用 40 天" */
+  headline(): string {
+    if (this.view.qty < 0) {
+      return '暂无数据, 下拉刷新';
+    }
+    const days: string = this.view.daysLeft >= 0 ? ` · 约可用 ${this.view.daysLeft} 天` : '';
+    return `${PowerStatus.levelText(this.view.level)}${days}`;
+  }
+
+  wide(): boolean {
+    return this.bp === 'lg';
+  }
+
+  @Styles
+  glass() {
+    .backgroundColor($r('app.color.glass'))
+    .borderRadius(24)
   }
 
   @Builder
   routes(name: string, param: Object) {
     if (name === 'setup') {
       SetupPage()
+    } else if (name === 'settings') {
+      SettingsPage()
     }
   }
 
-  /** 顶部主卡: 深蓝渐变, 与图标同色系 */
+  @Builder
+  roundButton(symbol: Resource, action: () => void) {
+    Button({ type: ButtonType.Circle }) {
+      SymbolGlyph(symbol)
+        .fontSize(20)
+        .fontColor([$r('app.color.on_sky')])
+    }
+    .width(40)
+    .height(40)
+    .backgroundColor($r('app.color.glass'))
+    .onClick(action)
+  }
+
+  @Builder
+  topBar() {
+    Row({ space: 8 }) {
+      SymbolGlyph($r('sys.symbol.house_fill'))
+        .fontSize(18)
+        .fontColor([$r('app.color.on_sky')])
+      Text(this.view.configured ? (this.view.room.length > 0 ? this.view.room : '我的宿舍') : '民大电费')
+        .fontSize(20)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.on_sky'))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .layoutWeight(1)
+      if (this.view.configured) {
+        if (this.querying) {
+          Row() {
+            LoadingProgress().width(22).height(22).color($r('app.color.on_sky'))
+          }
+          .width(40)
+          .height(40)
+          .borderRadius(20)
+          .justifyContent(FlexAlign.Center)
+          .backgroundColor($r('app.color.glass'))
+        } else {
+          this.roundButton($r('sys.symbol.arrow_clockwise'), () => this.query())
+        }
+      }
+      this.roundButton($r('sys.symbol.gearshape'), () => this.push('settings'))
+    }
+    .width('100%')
+    .height(56)
+    .padding({ left: 20, right: 16 })
+  }
+
+  /** 大号读数, 平板横屏左对齐, 其余居中 */
   @Builder
   hero() {
     Column() {
-      Row({ space: 6 }) {
-        SymbolGlyph($r('sys.symbol.bolt_fill'))
-          .fontSize(15)
-          .fontColor([$r('app.color.power_amber')])
-        Text(this.view.room.length > 0 ? this.view.room : '我的宿舍')
-          .fontSize(15)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.hero_secondary'))
+      Row() {
+        Text(PowerStatus.fmtQty(this.view.qty))
+          .fontSize(this.wide() ? 128 : 104)
+          .fontWeight(FontWeight.Lighter)
+          .fontColor($r('app.color.on_sky'))
           .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .layoutWeight(1)
-        Row({ space: 5 }) {
-          Circle()
-            .width(7)
-            .height(7)
-            .fill(this.levelColor(this.view.level))
-          Text(PowerStatus.levelText(this.view.level))
-            .fontSize(12)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.hero_label'))
-        }
-        .padding({ left: 9, right: 10, top: 4, bottom: 4 })
-        .borderRadius(11)
-        .backgroundColor($r('app.color.hero_fill'))
-        .visibility(this.view.qty >= 0 ? Visibility.Visible : Visibility.Hidden)
+          .contentTransition(new NumericTextTransition({ flipDirection: FlipDirection.DOWN, enableBlur: false }))
+        Text('度')
+          .fontSize(28)
+          .fontWeight(FontWeight.Lighter)
+          .fontColor($r('app.color.on_sky'))
+          .margin({ top: this.wide() ? 30 : 24, left: 4 })
       }
-      .width('100%')
+      .alignItems(VerticalAlign.Top)
 
-      Row({ space: 20 }) {
-        Stack() {
-          Progress({ value: this.view.percent, total: 100, type: ProgressType.Ring })
-            .width(124)
-            .height(124)
-            .color(RING_GRADIENT)
-            .backgroundColor($r('app.color.hero_fill'))
-            .style({ strokeWidth: 13 })
-          Column() {
-            Text(`${this.view.percent}%`)
-              .fontSize(22)
-              .fontWeight(FontWeight.Bold)
-              .fontColor($r('app.color.hero_label'))
-            Text('余量')
-              .fontSize(11)
-              .fontColor($r('app.color.hero_tertiary'))
-          }
-        }
-
-        Column() {
-          Row({ space: 4 }) {
-            Text(PowerStatus.fmtQty(this.view.qty))
-              .fontSize(54)
-              .fontWeight(FontWeight.Bold)
-              .fontColor($r('app.color.hero_label'))
-              .maxLines(1)
-              .contentTransition(new NumericTextTransition({ flipDirection: FlipDirection.DOWN, enableBlur: false }))
-            Text('度')
-              .fontSize(18)
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.hero_secondary'))
-              .margin({ bottom: 10 })
-          }
-          .alignItems(VerticalAlign.Bottom)
-
-          Text('剩余电量')
-            .fontSize(14)
-            .fontColor($r('app.color.hero_secondary'))
-
-          Row({ space: 6 }) {
-            if (this.querying) {
-              LoadingProgress().width(14).height(14).color($r('app.color.hero_tertiary'))
-            }
-            Text(this.querying ? '正在查询…' : PowerStatus.fmtTime(this.view.lastAt))
-              .fontSize(12)
-              .fontColor($r('app.color.hero_tertiary'))
-          }
-          .margin({ top: 14 })
-        }
-        .alignItems(HorizontalAlign.Start)
-        .layoutWeight(1)
-      }
-      .width('100%')
-      .margin({ top: 20 })
+      Text(this.headline())
+        .fontSize(20)
+        .fontColor($r('app.color.on_sky'))
+      Text(this.querying ? '正在查询…' : PowerStatus.fmtTime(this.view.lastAt))
+        .fontSize(14)
+        .fontColor($r('app.color.on_sky_secondary'))
+        .margin({ top: 6 })
     }
     .width('100%')
-    .padding(20)
-    .borderRadius(26)
-    .linearGradient({
-      angle: 135,
-      colors: [[$r('app.color.hero_start'), 0], [$r('app.color.hero_end'), 1]]
-    })
-    .shadow({ radius: 24, color: '#33141F4A', offsetY: 8 })
+    .alignItems(this.wide() ? HorizontalAlign.Start : HorizontalAlign.Center)
+    .padding({ left: this.wide() ? 12 : 0, top: this.wide() ? 48 : 24, bottom: 28 })
   }
 
   @Builder
-  alertBanner() {
+  banner() {
     Row({ space: 10 }) {
       SymbolGlyph($r('sys.symbol.exclamationmark_triangle_fill'))
-        .fontSize(16)
-        .fontColor([$r('app.color.power_red')])
-      Text(this.statusText.length > 0 ? this.statusText : '登录已过期, 请重新绑定以恢复查询')
+        .fontSize(18)
+        .fontColor([$r('app.color.on_sky')])
+      Text(this.statusText.length > 0 ? this.statusText : '登录已过期, 重新绑定后即可恢复查询')
         .fontSize(14)
-        .fontColor($r('app.color.power_label'))
+        .fontColor($r('app.color.on_sky'))
         .layoutWeight(1)
-      Text('重新登录')
-        .fontSize(14)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.power_accent'))
-        .onClick(() => this.openSetup())
-    }
-    .width('100%')
-    .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-    .borderRadius(14)
-    .backgroundColor($r('app.color.power_card'))
-  }
-
-  /** iOS 设置风格的彩色圆角图标 */
-  @Builder
-  iconTile(icon: Resource, tint: ResourceColor, size: number) {
-    Row() {
-      SymbolGlyph(icon)
-        .fontSize(size * 0.55)
-        .fontColor([Color.White])
-    }
-    .width(size)
-    .height(size)
-    .borderRadius(size * 0.24)
-    .justifyContent(FlexAlign.Center)
-    .backgroundColor(tint)
-  }
-
-  @Builder
-  tile(icon: Resource, tint: ResourceColor, value: string, unit: string, title: string, note: string,
-       action: () => void) {
-    Column() {
-      this.iconTile(icon, tint, 30)
-      Row({ space: 3 }) {
-        Text(value)
-          .fontSize(28)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.power_label'))
-        Text(unit)
+      if (this.view.sessionDead) {
+        Text('重新登录')
           .fontSize(14)
           .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.power_secondary'))
-          .margin({ bottom: 5 })
+          .fontColor($r('app.color.on_sky'))
+          .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+          .borderRadius(14)
+          .backgroundColor($r('app.color.glass'))
+          .onClick(() => this.push('setup'))
       }
-      .alignItems(VerticalAlign.Bottom)
-      .margin({ top: 14 })
-      Text(title)
-        .fontSize(14)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.power_label'))
-        .margin({ top: 2 })
-      Text(note)
-        .fontSize(12)
-        .fontColor($r('app.color.power_secondary'))
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .margin({ top: 2 })
     }
     .width('100%')
     .padding(16)
-    .borderRadius(20)
-    .alignItems(HorizontalAlign.Start)
-    .backgroundColor($r('app.color.power_card'))
-    .onClick(action)
+    .glass()
   }
 
+  /** 近 7 天柱状图, 类似「天气」的逐小时预报条 */
   @Builder
-  stats() {
-    Row({ space: 12 }) {
-      Column() {
-        this.tile($r('sys.symbol.timer'), $r('app.color.power_indigo'),
-          this.view.daysLeft >= 0 ? String(this.view.daysLeft) : '--', '天', '预计可用',
-          this.view.dailyUse > 0 ? `日均 ${this.view.dailyUse.toFixed(1)} 度` : '数据积累中', () => {})
-      }
-      .layoutWeight(1)
-
-      Column() {
-        this.tile($r('sys.symbol.bell_fill'), $r('app.color.power_orange'),
-          PowerStatus.fmtQty(this.view.threshold), '度', '提醒阈值', '点按修改', () => this.pickThreshold())
-      }
-      .layoutWeight(1)
-    }
-    .width('100%')
-  }
-
-  @Builder
-  sectionHeader(title: string) {
-    Text(title)
-      .fontSize(13)
-      .fontColor($r('app.color.power_secondary'))
-      .width('100%')
-      .padding({ left: 16, top: 12, bottom: 2 })
-  }
-
-  @Builder
-  row(icon: Resource, tint: ResourceColor, title: string, value: string, action: () => void) {
-    Row({ space: 12 }) {
-      this.iconTile(icon, tint, 29)
-      Text(title)
-        .fontSize(16)
-        .fontColor($r('app.color.power_label'))
-        .layoutWeight(1)
-      Text(value)
-        .fontSize(15)
-        .fontColor($r('app.color.power_secondary'))
-      SymbolGlyph($r('sys.symbol.chevron_right'))
-        .fontSize(13)
-        .fontColor([$r('app.color.power_tertiary')])
-    }
-    .width('100%')
-    .height(52)
-    .padding({ left: 14, right: 14 })
-    .stateStyles({
-      pressed: {
-        .backgroundColor($r('app.color.power_fill'))
-      },
-      normal: {
-        .backgroundColor(Color.Transparent)
-      }
-    })
-    .onClick(action)
-  }
-
-  @Builder
-  settings() {
+  weekCard() {
     Column() {
-      this.row($r('sys.symbol.bell_fill'), $r('app.color.power_red'), '低电量通知',
-        this.notifyOn ? '已开启' : '未开启', () => this.requestNotify())
-      Divider().color($r('app.color.power_separator')).strokeWidth(0.5).margin({ left: 55 })
-      this.row($r('sys.symbol.square_grid_2x2'), $r('app.color.power_accent'), '添加桌面卡片', '2×2 · 2×4',
-        () => this.addCard())
-      Divider().color($r('app.color.power_separator')).strokeWidth(0.5).margin({ left: 55 })
-      this.row($r('sys.symbol.clock'), $r('app.color.power_green'), '自动查询', '约每 2 小时', () => {
-        this.getUIContext().getPromptAction().showToast({ message: '后台由系统择机执行, 卡片也会定时刷新' });
-      })
+      Row({ space: 6 }) {
+        SymbolGlyph($r('sys.symbol.calendar'))
+          .fontSize(14)
+          .fontColor([$r('app.color.on_sky_secondary')])
+        Text('近 7 天用电')
+          .fontSize(14)
+          .fontColor($r('app.color.on_sky_secondary'))
+          .layoutWeight(1)
+        Text(this.view.dailyUse > 0 ? `日均 ${this.view.dailyUse.toFixed(1)} 度` : '数据积累中')
+          .fontSize(13)
+          .fontColor($r('app.color.on_sky_secondary'))
+      }
+      .width('100%')
+
+      Divider()
+        .color($r('app.color.glass_track'))
+        .strokeWidth(0.5)
+        .margin({ top: 12, bottom: 12 })
+
+      Row() {
+        ForEach(this.view.week, (d: DayUse, i: number) => {
+          Column({ space: 6 }) {
+            Text(d.used >= 0 ? d.used.toFixed(1) : '—')
+              .fontSize(12)
+              .fontColor($r('app.color.on_sky_secondary'))
+            Stack({ alignContent: Alignment.Bottom }) {
+              Column()
+                .width(10)
+                .height(this.barHeight(d))
+                .borderRadius(5)
+                .backgroundColor(d.used < 0 ? $r('app.color.glass_track')
+                  : (i === this.view.week.length - 1 ? $r('app.color.power_amber') : $r('app.color.on_sky')))
+            }
+            .height(84)
+            Text(d.label)
+              .fontSize(12)
+              .fontColor(i === this.view.week.length - 1 ? $r('app.color.on_sky') : $r('app.color.on_sky_secondary'))
+          }
+          .layoutWeight(1)
+        }, (d: DayUse, i: number) => `${i}-${d.label}-${d.used}`)
+      }
+      .width('100%')
     }
     .width('100%')
-    .borderRadius(14)
-    .clip(true)
-    .backgroundColor($r('app.color.power_card'))
+    .padding(16)
+    .glass()
+  }
+
+  barHeight(d: DayUse): number {
+    let max: number = 0;
+    this.view.week.forEach((x: DayUse) => {
+      max = Math.max(max, x.used);
+    });
+    if (d.used <= 0 || max <= 0) {
+      return 6;
+    }
+    return Math.max(6, d.used / max * 84);
+  }
+
+  /** 信息小卡, 类似「天气」的湿度/风速卡 */
+  @Builder
+  tile(symbol: Resource, title: string, value: string, unit: string, desc: string, percent: number,
+       action: () => void) {
+    Column() {
+      Row({ space: 6 }) {
+        SymbolGlyph(symbol)
+          .fontSize(14)
+          .fontColor([$r('app.color.on_sky_secondary')])
+        Text(title)
+          .fontSize(14)
+          .fontColor($r('app.color.on_sky_secondary'))
+      }
+
+      Blank()
+
+      Row({ space: 3 }) {
+        Text(value)
+          .fontSize(30)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.on_sky'))
+          .maxLines(1)
+        Text(unit)
+          .fontSize(14)
+          .fontColor($r('app.color.on_sky_secondary'))
+          .margin({ bottom: 5 })
+      }
+      .alignItems(VerticalAlign.Bottom)
+
+      if (percent >= 0) {
+        Progress({ value: percent, total: 100, type: ProgressType.Linear })
+          .width('100%')
+          .height(6)
+          .color($r('app.color.on_sky'))
+          .backgroundColor($r('app.color.glass_track'))
+          .style({ strokeWidth: 6, strokeRadius: 3 })
+          .margin({ top: 8 })
+      }
+      Text(desc)
+        .fontSize(12)
+        .fontColor($r('app.color.on_sky_secondary'))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .margin({ top: 6 })
+    }
+    .width('100%')
+    .height(150)
+    .padding(16)
+    .alignItems(HorizontalAlign.Start)
+    .glass()
+    .onClick(action)
   }
 
   @Builder
-  rebind() {
-    Text('重新绑定宿舍')
-      .fontSize(16)
-      .fontColor($r('app.color.power_red'))
-      .textAlign(TextAlign.Center)
-      .width('100%')
-      .height(52)
-      .borderRadius(14)
-      .backgroundColor($r('app.color.power_card'))
-      .stateStyles({
-        pressed: {
-          .opacity(0.6)
-        },
-        normal: {
-          .opacity(1)
-        }
-      })
-      .onClick(() => this.openSetup())
+  tiles() {
+    GridRow({ columns: { xs: 2, sm: 2, md: 4, lg: 2 }, gutter: { x: 12, y: 12 } }) {
+      GridCol({ span: 1 }) {
+        this.tile($r('sys.symbol.battery_50percent'), '余量', `${this.view.percent}`, '%', '以上次充值后为满格',
+          this.view.percent, () => {})
+      }
+      GridCol({ span: 1 }) {
+        this.tile($r('sys.symbol.bolt_fill'), '日均用电',
+          this.view.dailyUse > 0 ? this.view.dailyUse.toFixed(1) : '--', '度',
+          this.view.dailyUse > 0 ? '自上次充值以来' : '至少需要 6 小时数据', -1, () => {})
+      }
+      GridCol({ span: 1 }) {
+        this.tile($r('sys.symbol.clock'), '预计用完',
+          this.view.daysLeft >= 0 ? PowerStatus.runOutDate(this.view.daysLeft) : '--', '',
+          this.view.daysLeft >= 0 ? `约 ${this.view.daysLeft} 天后` : '按近期用电估算', -1, () => {})
+      }
+      GridCol({ span: 1 }) {
+        this.tile($r('sys.symbol.bell_fill'), '提醒阈值', PowerStatus.fmtQty(this.view.threshold), '度',
+          '低于时通知 · 点按修改', -1,
+          () => pickThreshold(this.getUIContext(), this.view.threshold, () => this.reload()))
+      }
+    }
+  }
+
+  @Builder
+  cards() {
+    Column({ space: 12 }) {
+      if (this.statusText.length > 0 || this.view.sessionDead) {
+        this.banner()
+      }
+      this.weekCard()
+      this.tiles()
+      Text('数据来自完美校园云缴费 · 下拉刷新')
+        .fontSize(12)
+        .fontColor($r('app.color.on_sky_tertiary'))
+        .margin({ top: 8 })
+    }
+    .width('100%')
   }
 
   @Builder
   emptyState() {
-    Column({ space: 10 }) {
+    Column({ space: 12 }) {
       Image($r('app.media.startIcon'))
-        .width(88)
-        .height(88)
+        .width(96)
+        .height(96)
         .margin({ bottom: 8 })
       Text('绑定你的宿舍')
-        .fontSize(24)
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.power_label'))
+        .fontSize(28)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.on_sky'))
       Text('用完美校园帐号登录, 在缴费页选中房间, 看到剩余电量后自动完成绑定')
         .fontSize(15)
-        .fontColor($r('app.color.power_secondary'))
+        .fontColor($r('app.color.on_sky_secondary'))
         .textAlign(TextAlign.Center)
+        .constraintSize({ maxWidth: 360 })
       Button('开始绑定', { type: ButtonType.Capsule })
-        .width('100%')
-        .height(50)
-        .fontSize(17)
+        .width(240)
+        .height(48)
+        .fontSize(16)
         .fontWeight(FontWeight.Medium)
-        .fontColor(Color.White)
-        .backgroundColor($r('app.color.power_accent'))
-        .margin({ top: 14 })
-        .onClick(() => this.openSetup())
+        .fontColor($r('app.color.sky_none_top'))
+        .backgroundColor(Color.White)
+        .margin({ top: 16 })
+        .onClick(() => this.push('setup'))
     }
     .width('100%')
-    .padding(24)
-    .borderRadius(26)
-    .alignItems(HorizontalAlign.Center)
-    .backgroundColor($r('app.color.power_card'))
+    .padding({ left: 24, right: 24, top: 96, bottom: 48 })
   }
 
   build() {
     Navigation(this.pathStack) {
-      Refresh({ refreshing: $$this.refreshing }) {
-        Scroll(this.scroller) {
-          Column({ space: 12 }) {
-            if (this.view.configured) {
-              this.hero()
-              if (this.statusText.length > 0 || this.view.sessionDead) {
-                this.alertBanner()
-              }
-              this.stats()
-              this.sectionHeader('提醒与卡片')
-              this.settings()
-              Blank().height(8)
-              this.rebind()
-            } else {
-              this.emptyState()
-            }
-            Text('数据来自完美校园云缴费, 仅保存在本机')
-              .fontSize(12)
-              .fontColor($r('app.color.power_tertiary'))
-              .margin({ top: 10 })
-          }
+      Stack({ alignContent: Alignment.Top }) {
+        // 天空渐变铺满整屏, 包括状态栏和导航条区域
+        Column()
           .width('100%')
-          .padding({ left: 16, right: 16, top: 8, bottom: 40 })
+          .height('100%')
+          .linearGradient({ angle: 180, colors: [[this.skyTop(), 0], [this.skyBottom(), 1]] })
+          .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+          .animation({ duration: 400 })
+
+        Column() {
+          this.topBar()
+          Refresh({ refreshing: $$this.refreshing }) {
+            Scroll(this.scroller) {
+              Column() {
+                if (this.view.configured) {
+                  GridRow({
+                    columns: { xs: 4, sm: 4, md: 8, lg: 12 },
+                    gutter: { x: 24 },
+                    breakpoints: { value: ['320vp', '600vp', '840vp'], reference: BreakpointsReference.WindowSize }
+                  }) {
+                    GridCol({ span: { xs: 4, sm: 4, md: 8, lg: 5 } }) {
+                      this.hero()
+                    }
+                    GridCol({ span: { xs: 4, sm: 4, md: 8, lg: 7 } }) {
+                      this.cards()
+                    }
+                  }
+                  .onBreakpointChange((bp: string) => {
+                    this.bp = bp;
+                  })
+                } else {
+                  this.emptyState()
+                }
+              }
+              .width('100%')
+              .padding({ left: 16, right: 16, bottom: 32 })
+            }
+            .width('100%')
+            .height('100%')
+            .align(Alignment.Top)
+            .scrollBar(BarState.Off)
+            .edgeEffect(EdgeEffect.Spring)
+          }
+          .onRefreshing(() => this.query())
+          .layoutWeight(1)
         }
         .width('100%')
         .height('100%')
-        .scrollBar(BarState.Off)
-        .edgeEffect(EdgeEffect.Spring)
-        .align(Alignment.Top)
       }
-      .onRefreshing(() => this.query())
       .width('100%')
       .height('100%')
-      .backgroundColor($r('app.color.power_bg'))
     }
-    // 标准 Navigation: 内容区排在标题栏下方, 状态栏安全区由系统处理; Free 模式大标题随滚动收起
-    .title(this.titleInfo(), {
-      backgroundColor: $r('app.color.power_bg'),
-      backgroundBlurStyle: BlurStyle.COMPONENT_THICK
-    })
-    .menus([
-      {
-        value: '刷新',
-        symbolIcon: new SymbolGlyphModifier($r('sys.symbol.arrow_clockwise')),
-        isEnabled: this.view.configured,
-        action: () => this.query()
-      }
-    ])
-    .titleMode(NavigationTitleMode.Free)
-    .mode(NavigationMode.Stack)
+    .hideTitleBar(true)
     .hideToolBar(true)
+    .mode(NavigationMode.Stack)
     .navDestination(this.routes)
-    .backgroundColor($r('app.color.power_bg'))
   }
 }

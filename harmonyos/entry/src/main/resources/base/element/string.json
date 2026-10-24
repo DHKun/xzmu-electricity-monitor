@@ -1,6 +1,6 @@
 {
   "string": [
-    { "name": "app_name", "value": "XZMU电费" },
+    { "name": "app_name", "value": "民大电费" },
     { "name": "module_desc", "value": "宿舍电费监控主模块" },
     { "name": "ability_desc", "value": "主界面" },
     { "name": "form_name", "value": "宿舍电量" },

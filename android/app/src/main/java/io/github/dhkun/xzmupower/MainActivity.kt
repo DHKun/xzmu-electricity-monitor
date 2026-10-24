@@ -187,7 +187,7 @@ class MainActivity : AppCompatActivity() {
         if (mgr.isRequestPinAppWidgetSupported) {
             mgr.requestPinAppWidget(ComponentName(this, PowerWidget::class.java), null, null)
         } else {
-            Snackbar.make(anchor, "请长按桌面空白处 → 小组件, 找到 XZMU电费", Snackbar.LENGTH_LONG).show()
+            Snackbar.make(anchor, "请长按桌面空白处 → 小组件, 找到民大电费", Snackbar.LENGTH_LONG).show()
         }
     }
 

@@ -4,6 +4,7 @@ import { window } from '@kit.ArkUI';
 import { Prefs } from '../service/Prefs';
 import { workScheduler } from '@kit.BackgroundTasksKit';
 import { webview } from '@kit.ArkWeb';
+import BuildProfile from 'BuildProfile';
 
 const DOMAIN: number = 0x0000;
 const TAG: string = 'EntryAbility';
@@ -12,6 +13,10 @@ export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     hilog.info(DOMAIN, TAG, 'onCreate');
     Prefs.init(this.context);
+    // 调试构建: aa start ... --pb xzmu.demo true 写入示例数据
+    if (BuildProfile.DEBUG && want.parameters !== undefined && want.parameters['xzmu.demo'] === true) {
+      Prefs.seedDemo().catch(() => {});
+    }
     // 首页要从 WebCookieManager 取实时会话, 内核须先初始化
     try {
       webview.WebviewController.initializeWebEngine();
@@ -48,9 +53,7 @@ export default class EntryAbility extends UIAbility {
         hilog.error(DOMAIN, TAG, 'loadContent failed: %{public}s', JSON.stringify(err));
         return;
       }
-      // 沉浸式: 状态栏融入页面背景
-      const win = windowStage.getMainWindowSync();
-      win.setWindowLayoutFullScreen(true).catch(() => {});
+      // 不设全屏布局: ArkUI 自动避让状态栏, 首页天空背景用 expandSafeArea 延伸到状态栏下
     });
   }
 }

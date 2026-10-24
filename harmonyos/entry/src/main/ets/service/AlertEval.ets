@@ -41,7 +41,7 @@ export class AlertNotify {
           normal: {
             title: title,
             text: text,
-            additionalText: 'XZMU电费'
+            additionalText: '民大电费'
           }
         }
       };

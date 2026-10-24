@@ -23,6 +23,7 @@
         "exported": true,
         "startWindowIcon": "$media:startIcon",
         "startWindowBackground": "$color:power_bg",
+        "orientation": "auto_rotation_restricted",
         "skills": [
           {
             "entities": ["entity.system.home"],

@@ -32,7 +32,7 @@ export class CardSync {
     card.time = PowerStatus.fmtShortTime(v.lastAt);
     card.busy = busy;
     if (v.sessionDead) {
-      card.sub = '登录已过期 · 点开重新登录';
+      card.sub = '登录已过期';
     } else if (v.daysLeft >= 0) {
       card.sub = `约可用 ${v.daysLeft} 天`;
     } else {

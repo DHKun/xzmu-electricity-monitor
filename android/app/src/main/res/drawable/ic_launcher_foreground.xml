@@ -1,20 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <!-- 同色描边 + 圆角连接, 让闪电拐角变圆 -->
-    <path android:pathData="M57.3,25.9 L35.7,58.5 L51.5,58.5 L47.3,82.1 L72.3,47.8 L56.5,47.8 L64.0,25.9 Z"
-        android:strokeWidth="2.6" android:strokeLineJoin="round">
-        <aapt:attr name="android:fillColor">
-            <gradient android:type="linear"
-                android:startX="54" android:startY="25" android:endX="54" android:endY="83"
-                android:startColor="#FFE56B" android:endColor="#FF9F0A" />
-        </aapt:attr>
-        <aapt:attr name="android:strokeColor">
-            <gradient android:type="linear"
-                android:startX="54" android:startY="25" android:endX="54" android:endY="83"
-                android:startColor="#FFE56B" android:endColor="#FF9F0A" />
-        </aapt:attr>
-    </path>
+    <!-- 扁平几何: 品牌蓝房子 + 琥珀闪电; 同色描边加圆角连接让拐角变圆 -->
+    <path android:fillColor="#3758C8" android:strokeColor="#3758C8"
+        android:strokeWidth="1.8" android:strokeLineJoin="round"
+        android:pathData="M54,31.7 L76.3,51.1 L70.6,51.1 L70.6,73.4 L37.4,73.4 L37.4,51.1 L31.7,51.1 Z" />
+    <path android:fillColor="#FFC01E" android:strokeColor="#FFC01E"
+        android:strokeWidth="1.2" android:strokeLineJoin="round"
+        android:pathData="M57.2,46.8 L46.4,61.2 L52.9,61.2 L50.4,71.3 L61.9,55.8 L55.4,55.8 L59.4,46.8 Z" />
 </vector>

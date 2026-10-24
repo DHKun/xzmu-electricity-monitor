@@ -3,6 +3,7 @@ import { webview } from '@kit.ArkWeb';
 import { Prefs } from '../service/Prefs';
 import { PowerApi, queryUrl, RoomState } from '../service/PowerApi';
 import { CardSync } from '../service/PowerSync';
+import { bumpData } from './Actions';
 
 const STEPS: string[] = ['登录', '选择项目', '选择房间'];
 
@@ -62,7 +63,6 @@ export struct SetupPage {
   @State step: number = 0;
   @State hintText: string = '用完美校园帐号或校园卡认证登录';
   @State loading: number = 0;
-  @State diagText: string = '';
   @State verifying: boolean = false;
   private stack: NavPathStack | null = null;
   private controller: webview.WebviewController = new webview.WebviewController();
@@ -108,7 +108,6 @@ export struct SetupPage {
         if (parts.length < 5) {
           return;
         }
-        this.diagText = `桥:${parts[1]} 脚本:${parts[2]}`;
         if (parts[2] !== 'true') {
           this.injectHook();
         }
@@ -233,11 +232,13 @@ export struct SetupPage {
           const label: string = r.roomLabel.length > 0 ? r.roomLabel : roomVerify;
           Prefs.saveBinding(payProId, roomVerify, label, cookie, r.quantity).then(() => {
             CardSync.pushAll(false);
+            bumpData();
             this.getUIContext().getPromptAction().showToast({
               message: `绑定成功 · ${label} 剩余 ${r.quantity}${r.unit}`
             });
             if (this.stack !== null) {
-              this.stack.pop('bound');
+              // 可能是从设置页进来的, 绑定成功直接回首页
+              this.stack.clear();
             }
           });
         } else if (r.sessionDead) {
@@ -260,7 +261,7 @@ export struct SetupPage {
         if (i > 0) {
           Divider()
             .strokeWidth(2)
-            .color(i <= this.step ? $r('app.color.power_accent') : $r('app.color.power_separator'))
+            .color(i <= this.step ? $r('app.color.set_blue') : $r('app.color.power_separator'))
             .layoutWeight(1)
             .margin({ left: 6, right: 6, bottom: 18 })
         }
@@ -280,7 +281,7 @@ export struct SetupPage {
           .width(26)
           .height(26)
           .borderRadius(13)
-          .backgroundColor(i <= this.step ? $r('app.color.power_accent') : $r('app.color.power_fill'))
+          .backgroundColor(i <= this.step ? $r('app.color.set_blue') : $r('app.color.power_fill'))
 
           Text(label)
             .fontSize(12)
@@ -299,17 +300,12 @@ export struct SetupPage {
           this.stepBar()
           Row({ space: 6 }) {
             if (this.verifying) {
-              LoadingProgress().width(16).height(16).color($r('app.color.power_accent'))
+              LoadingProgress().width(16).height(16).color($r('app.color.set_blue'))
             }
             Text(this.hintText)
               .fontSize(13)
               .fontColor($r('app.color.power_secondary'))
               .textAlign(TextAlign.Center)
-          }
-          if (this.diagText.length > 0) {
-            Text(this.diagText)
-              .fontSize(10)
-              .fontColor($r('app.color.power_tertiary'))
           }
         }
         .width('100%')
@@ -368,7 +364,7 @@ export struct SetupPage {
           Progress({ value: this.loading, total: 100, type: ProgressType.Linear })
             .width('100%')
             .height(2)
-            .color($r('app.color.power_accent'))
+            .color($r('app.color.set_blue'))
             .backgroundColor(Color.Transparent)
             .style({ strokeWidth: 2 })
             .visibility(this.loading > 0 && this.loading < 100 ? Visibility.Visible : Visibility.None)
@@ -378,30 +374,33 @@ export struct SetupPage {
         .borderRadius({ topLeft: 20, topRight: 20 })
         .clip(true)
 
-        Button({ type: ButtonType.Capsule }) {
-          Row({ space: 8 }) {
-            if (this.verifying) {
-              LoadingProgress().width(20).height(20).color(Color.White)
+        Row() {
+          Button({ type: ButtonType.Capsule }) {
+            Row({ space: 8 }) {
+              if (this.verifying) {
+                LoadingProgress().width(20).height(20).color(Color.White)
+              }
+              Text(this.verifying ? '正在验证…' : '已看到剩余电量, 完成绑定')
+                .fontSize(16)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(Color.White)
             }
-            Text(this.verifying ? '正在验证…' : '已看到剩余电量, 完成绑定')
-              .fontSize(16)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(Color.White)
           }
+          .width('100%')
+          .height(48)
+          .backgroundColor($r('app.color.set_blue'))
+          .enabled(!this.verifying)
+          .onClick(() => this.tryFinish())
         }
         .width('100%')
-        .height(48)
-        .backgroundColor($r('app.color.power_accent'))
-        .margin({ left: 16, right: 16, top: 10, bottom: 10 })
-        .enabled(!this.verifying)
-        .onClick(() => this.tryFinish())
+        .padding({ left: 16, right: 16, top: 10, bottom: 10 })
       }
       .width('100%')
       .height('100%')
       .padding({ left: 0, right: 0 })
     }
-    .title('绑定宿舍', { backgroundColor: $r('app.color.power_bg') })
-    .backgroundColor($r('app.color.power_bg'))
+    .title('绑定宿舍', { backgroundColor: $r('sys.color.background_secondary') })
+    .backgroundColor($r('sys.color.background_secondary'))
     .onReady((ctx: NavDestinationContext) => {
       this.stack = ctx.pathStack;
     })

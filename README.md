@@ -1,4 +1,4 @@
-# XZMU 电费查询
+# 民大电费
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -19,7 +19,7 @@
 
 ## 安卓 App
 
-**直接下载**：[Releases](https://github.com/DHKun/xzmu-electricity-monitor/releases) 里的 `XZMUPower-v1.1.1.apk`，安装后按提示登录选房即可。
+**直接下载**：[Releases](https://github.com/DHKun/xzmu-electricity-monitor/releases) 里的 `MinDaPower-v1.2.0.apk`，安装后按提示登录选房即可。
 
 Material 3 界面：大标题顶栏、电量圆环、预计可用天数与日均用电估算、分组设置列表，深浅色适配。
 桌面小组件：默认 2×2，拉宽到 4×2 自动切换为圆环布局，组件上可直接刷新。

@@ -7,6 +7,13 @@ export enum PowerLevel {
   LOW = 3
 }
 
+/** 某一天的用电量, 用于近 7 天柱状图 */
+export class DayUse {
+  label: string = '';
+  /** 当天用电(度), <0 表示当天没有足够读数 */
+  used: number = -1;
+}
+
 /** 由存储推算出的展示状态, App 首页与桌面卡片共用 */
 export class PowerView {
   configured: boolean = false;
@@ -19,6 +26,8 @@ export class PowerView {
   dailyUse: number = -1;
   /** 预计可用天数, <0 表示无法估算 */
   daysLeft: number = -1;
+  /** 近 7 天每日用电, 最后一项是今天 */
+  week: DayUse[] = [];
   lastAt: number = 0;
   sessionDead: boolean = false;
   threshold: number = 20;
@@ -39,7 +48,9 @@ export class PowerStatus {
     v.level = PowerStatus.levelOf(v.qty, v.threshold);
     const peak: number = Math.max(Prefs.getPeakQty(), v.qty, 1);
     v.percent = Math.round(Math.min(100, v.qty / peak * 100));
-    v.dailyUse = PowerStatus.estimateDaily(Prefs.getSamples());
+    const samples: Sample[] = Prefs.getSamples();
+    v.dailyUse = PowerStatus.estimateDaily(samples);
+    v.week = PowerStatus.lastWeek(samples);
     if (v.dailyUse > 0.05) {
       v.daysLeft = Math.floor(v.qty / v.dailyUse);
     }
@@ -91,6 +102,47 @@ export class PowerStatus {
       return -1;
     }
     return used / hours * 24;
+  }
+
+  /**
+   * 近 7 天每日用电: 相邻读数的下降量按时间归到当天, 读数上涨(充值)不计.
+   * 某天没有任何相邻读数落在当天时记为 -1.
+   */
+  static lastWeek(samples: Sample[]): DayUse[] {
+    const names: string[] = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+    const today: Date = new Date();
+    today.setHours(0, 0, 0, 0);
+    const out: DayUse[] = [];
+    for (let k = 6; k >= 0; k--) {
+      const start: number = today.getTime() - k * 86400000;
+      const end: number = start + 86400000;
+      const d: DayUse = new DayUse();
+      d.label = k === 0 ? '今天' : names[new Date(start).getDay()];
+      let used: number = 0;
+      let seen: boolean = false;
+      for (let i = 1; i < samples.length; i++) {
+        const at: number = samples[i].at;
+        if (at >= start && at < end) {
+          seen = true;
+          const drop: number = samples[i - 1].qty - samples[i].qty;
+          if (drop > 0) {
+            used += drop;
+          }
+        }
+      }
+      d.used = seen ? used : -1;
+      out.push(d);
+    }
+    return out;
+  }
+
+  /** 预计用完的日期, 如 "11月3日" */
+  static runOutDate(daysLeft: number): string {
+    if (daysLeft < 0) {
+      return '';
+    }
+    const d: Date = new Date(Date.now() + daysLeft * 86400000);
+    return `${d.getMonth() + 1}月${d.getDate()}日`;
   }
 
   static fmtQty(qty: number): string {

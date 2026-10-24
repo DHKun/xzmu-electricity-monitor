@@ -13,6 +13,33 @@ struct PowerCard {
   @LocalStorageProp('time') time: string = '';
   @LocalStorageProp('busy') busy: boolean = false;
 
+  /** 与 App 首页同一套天空渐变, 随电量变化 */
+  skyTop(): ResourceColor {
+    if (this.level === 3) {
+      return $r('app.color.sky_low_top');
+    }
+    if (this.level === 2) {
+      return $r('app.color.sky_warn_top');
+    }
+    if (this.level === 1) {
+      return $r('app.color.sky_ok_top');
+    }
+    return $r('app.color.sky_none_top');
+  }
+
+  skyBottom(): ResourceColor {
+    if (this.level === 3) {
+      return $r('app.color.sky_low_bottom');
+    }
+    if (this.level === 2) {
+      return $r('app.color.sky_warn_bottom');
+    }
+    if (this.level === 1) {
+      return $r('app.color.sky_ok_bottom');
+    }
+    return $r('app.color.sky_none_bottom');
+  }
+
   /** 与 PowerLevel 枚举一致: 1 充足 2 偏低 3 不足 */
   levelColor(): ResourceColor {
     if (this.level === 3) {
@@ -36,10 +63,10 @@ struct PowerCard {
       Text('尚未绑定宿舍')
         .fontSize(15)
         .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.hero_label'))
+        .fontColor($r('app.color.on_sky'))
       Text('轻点打开 App 绑定')
         .fontSize(11)
-        .fontColor($r('app.color.hero_secondary'))
+        .fontColor($r('app.color.on_sky_secondary'))
     }
     .width('100%')
     .height('100%')
@@ -56,7 +83,7 @@ struct PowerCard {
         Text(this.room)
           .fontSize(12)
           .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.hero_secondary'))
+          .fontColor($r('app.color.on_sky_secondary'))
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .layoutWeight(1)
@@ -68,11 +95,11 @@ struct PowerCard {
             LoadingProgress()
               .width(18)
               .height(18)
-              .color($r('app.color.hero_label'))
+              .color($r('app.color.on_sky'))
           } else {
             SymbolGlyph($r('sys.symbol.arrow_clockwise'))
               .fontSize(15)
-              .fontColor([$r('app.color.hero_secondary')])
+              .fontColor([$r('app.color.on_sky_secondary')])
           }
         }
         .width(28)
@@ -86,12 +113,12 @@ struct PowerCard {
         Text(this.qty)
           .fontSize(38)
           .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.hero_label'))
+          .fontColor($r('app.color.on_sky'))
           .maxLines(1)
         Text('度')
           .fontSize(14)
           .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.hero_secondary'))
+          .fontColor($r('app.color.on_sky_secondary'))
           .margin({ bottom: 7 })
       }
       .alignItems(VerticalAlign.Bottom)
@@ -99,8 +126,8 @@ struct PowerCard {
       Progress({ value: this.pct, total: 100, type: ProgressType.Linear })
         .width('100%')
         .height(6)
-        .color($r('app.color.power_amber'))
-        .backgroundColor($r('app.color.hero_fill'))
+        .color($r('app.color.on_sky'))
+        .backgroundColor($r('app.color.glass_track'))
         .style({ strokeWidth: 6, strokeRadius: 3 })
         .margin({ top: 6 })
 
@@ -111,13 +138,13 @@ struct PowerCard {
           .fill(this.levelColor())
         Text(this.sub)
           .fontSize(11)
-          .fontColor($r('app.color.hero_secondary'))
+          .fontColor($r('app.color.on_sky_secondary'))
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .layoutWeight(1)
         Text(this.time)
           .fontSize(10)
-          .fontColor($r('app.color.hero_tertiary'))
+          .fontColor($r('app.color.on_sky_tertiary'))
       }
       .width('100%')
       .margin({ top: 8 })
@@ -139,8 +166,8 @@ struct PowerCard {
     .height('100%')
     .padding(14)
     .linearGradient({
-      angle: 135,
-      colors: [[$r('app.color.hero_start'), 0], [$r('app.color.hero_end'), 1]]
+      angle: 180,
+      colors: [[this.skyTop(), 0], [this.skyBottom(), 1]]
     })
     .onClick(() => {
       postCardAction(this, {
