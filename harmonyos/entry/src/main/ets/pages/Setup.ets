@@ -19,47 +19,110 @@ class JsBridge {
 const HOOK_SCRIPT: string = `(function(){
   if (window.__xzmuScan) return;
   window.__xzmuScan = true;
-  function report(u){ try { if (window.xzmuNative) window.xzmuNative.onRoomState(String(u)); } catch(e) {} }
+  function report(u){
+    u = String(u);
+    if (u.indexOf('getRoomState.do') < 0) return;
+    try { console.log('XZMU_REPORT:' + u); } catch(e) {}
+    try { if (window.xzmuNative) window.xzmuNative.onRoomState(u); } catch(e) {}
+  }
   var origOpen = XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.open = function(method, url){ try { report(url); } catch(e) {} return origOpen.apply(this, arguments); };
   if (window.fetch) {
     var origFetch = window.fetch;
     window.fetch = function(input, init){ try { report(typeof input === 'string' ? input : (input && input.url) || ''); } catch(e) {} return origFetch.apply(this, arguments); };
   }
-  var n = 0;
-  var t = setInterval(function(){
-    n++;
+  var last = '';
+  setInterval(function(){
     var ta = document.getElementById('thirdAccount');
     var m = location.href.match(/[?&]payProId=([0-9]+)/);
-    if (ta && ta.value && m) {
-      clearInterval(t);
+    if (ta && ta.value && m && ta.value !== last) {
+      last = ta.value;
       report('getRoomState.do?payProId=' + m[1] + '&roomverify=' + encodeURIComponent(ta.value));
-    } else if (n > 60) { clearInterval(t); }
+    }
   }, 500);
 })()`;
+
+/**
+ * 原生主动轮询: 不依赖 JS 桥, 直接读 #thirdAccount 与 URL 里的 payProId.
+ * 返回 XZMU|桥类型|脚本已注入|payProId|roomverify(URI 编码)
+ */
+const POLL_SCRIPT: string = `(function(){
+  var ta = document.getElementById('thirdAccount');
+  var m = location.href.match(/[?&]payProId=([0-9]+)/);
+  return 'XZMU|' + (typeof window.xzmuNative) + '|' + (window.__xzmuScan === true) + '|' +
+    (m ? m[1] : '') + '|' + (ta && ta.value ? encodeURIComponent(ta.value) : '');
+})()`;
+
+const CONSOLE_PREFIX: string = 'XZMU_REPORT:';
 
 @Entry
 @Component
 struct Setup {
   @State hintText: string = '① 请登录(完美校园帐号或校园卡认证)';
   @State loading: number = 0;
+  @State diagText: string = '';
   private controller: webview.WebviewController = new webview.WebviewController();
   private pendingPayProId: string = '';
   private pendingRoomVerify: string = '';
   private binding: boolean = false;
   private lastAttemptKey: string = '';
-  private lastAttemptAt: number = 0;
   private forceLoginTried: boolean = false;
+  private currentUrl: string = '';
+  private pollTimer: number = -1;
 
   aboutToAppear(): void {
     nativeHandler = (url: string) => {
       this.handleIntercept(url);
     };
     Prefs.init(getContext(this) as common.UIAbilityContext).catch(() => {});
+    this.pollTimer = setInterval(() => {
+      this.pollPage();
+    }, 1000);
   }
 
   aboutToDisappear(): void {
     nativeHandler = null;
+    if (this.pollTimer >= 0) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = -1;
+    }
+  }
+
+  /** 缴费域名下每秒读一次页面状态; 钩子脚本没跑就补注入 */
+  pollPage(): void {
+    if (this.binding || !this.currentUrl.includes(PowerApi.HOST)) {
+      return;
+    }
+    try {
+      this.controller.runJavaScript(POLL_SCRIPT).then((raw: string) => {
+        const at: number = raw.indexOf('XZMU|');
+        if (at < 0) {
+          return;
+        }
+        // 结果可能带 JSON 引号, 去掉首尾引号再拆
+        const parts: string[] = raw.substring(at).replace(new RegExp('"+$'), '').split('|');
+        if (parts.length < 5) {
+          return;
+        }
+        this.diagText = `桥:${parts[1]} 脚本:${parts[2]}`;
+        if (parts[2] !== 'true') {
+          this.injectHook();
+        }
+        if (parts[3].length > 0 && parts[4].length > 0) {
+          this.handleIntercept(`getRoomState.do?payProId=${parts[3]}&roomverify=${parts[4]}`);
+        }
+      }).catch(() => {});
+    } catch (e) {
+      // controller 尚未挂载
+    }
+  }
+
+  injectHook(): void {
+    try {
+      this.controller.runJavaScript(HOOK_SCRIPT).catch(() => {});
+    } catch (e) {
+      // controller 尚未挂载
+    }
   }
 
   /** 登录页: 把"选择学校"下拉换成可搜索弹层(与安卓版同一脚本) */
@@ -130,13 +193,12 @@ struct Setup {
     if (payProId.length === 0 || roomVerify.length === 0) {
       return;
     }
+    // 三条通道会重复上报同一房间; 自动验证每页每房间只做一次, 失败后靠按钮重试
     const key: string = `${payProId}|${roomVerify}`;
-    const now: number = Date.now();
-    if (key === this.lastAttemptKey && now - this.lastAttemptAt < 5000) {
+    if (key === this.lastAttemptKey) {
       return;
     }
     this.lastAttemptKey = key;
-    this.lastAttemptAt = now;
     this.pendingPayProId = payProId;
     this.pendingRoomVerify = roomVerify;
     this.hintText = `检测到房间 ${roomVerify}, 正在验证会话…`;
@@ -191,6 +253,12 @@ struct Setup {
           .width('100%')
           .textAlign(TextAlign.Center)
           .padding(14)
+        if (this.diagText.length > 0) {
+          Text(this.diagText)
+            .fontSize(11)
+            .fontColor(Color.Gray)
+            .margin({ bottom: 6 })
+        }
         Divider().color($r('app.color.power_separator')).strokeWidth(1)
       }
       .width('100%')
@@ -211,8 +279,20 @@ struct Setup {
           methodList: ['onRoomState'],
           controller: this.controller
         })
+        .onConsole((event: OnConsoleEvent) => {
+          const msg: string = event.message.getMessage();
+          if (msg.startsWith(CONSOLE_PREFIX)) {
+            this.handleIntercept(msg.substring(CONSOLE_PREFIX.length));
+          }
+          return false;
+        })
         .onPageEnd((event: OnPageEndEvent) => {
           const url: string = event.url;
+          this.currentUrl = url;
+          this.lastAttemptKey = '';
+          if (url.includes(PowerApi.HOST)) {
+            this.injectHook();
+          }
           if (url.includes('api/authorize')) {
             this.injectSchoolSearch();
             this.controller.runJavaScript('document.title').then((title: string) => {
