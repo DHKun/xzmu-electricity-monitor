@@ -61,6 +61,34 @@ object Prefs {
             if (kv.size == 2 && t != null && q != null) t to q else null
         }
 
+    /** 跟随壁纸取色(Material You), 默认关闭用固定色板 */
+    fun dynamicColor(ctx: Context) = sp(ctx).getBoolean("dynamicColor", false)
+    fun setDynamicColor(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("dynamicColor", v).apply()
+
+    /** 调试构建专用: 写入一套示例数据, 便于在模拟器上不登录就查看已绑定界面 */
+    fun seedDemo(ctx: Context) {
+        val now = System.currentTimeMillis()
+        // 近 7 天每 6 小时一个读数, 中间有一次充值
+        val qtys = floatArrayOf(62f, 59f, 55f, 52f, 49f, 46f, 42f, 38f, 300f, 297f, 293f, 289f, 286f, 282f,
+            277f, 273f, 270f, 266f, 262f, 259f, 256f, 252f, 248f, 244f)
+        val samples = qtys.indices.joinToString(",") { i ->
+            "${now - (qtys.size - 1 - i) * 6 * 3_600_000L}:${qtys[i]}"
+        }
+        sp(ctx).edit()
+            .putBoolean("configured", true)
+            .putString("payProId", "3148")
+            .putString("roomVerify", "101-1--9-902")
+            .putString("roomLabel", "902房间")
+            .putString("cookieSnapshot", "SESSION=demo")
+            .putFloat("threshold", 20f)
+            .putFloat("lastQty", 244f)
+            .putFloat("peakQty", 300f)
+            .putLong("lastCheck", now)
+            .putBoolean("sessionDead", false)
+            .putString("samples", samples)
+            .apply()
+    }
+
     /** 记录一次成功读数: 更新最新值、满格基准、历史采样 */
     fun recordReading(ctx: Context, qty: Float) {
         val now = System.currentTimeMillis()

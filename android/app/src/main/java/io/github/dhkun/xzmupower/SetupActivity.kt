@@ -12,6 +12,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
@@ -38,6 +39,7 @@ class SetupActivity : AppCompatActivity() {
     private lateinit var hintText: TextView
     private lateinit var doneBtn: MaterialButton
     private val steps = arrayOf("登录", "选择项目", "选择房间")
+    private var webBackCallback: OnBackPressedCallback? = null
 
     private var pendingPayProId: String? = null
     private var pendingRoomVerify: String? = null
@@ -86,6 +88,7 @@ class SetupActivity : AppCompatActivity() {
             ) = intercept(request.url).let { null }
 
             override fun onPageFinished(view: WebView, url: String) {
+                webBackCallback?.isEnabled = view.canGoBack()
                 progressBar.visibility = View.INVISIBLE
                 updateHint(url)
                 if (url.contains("api/authorize")) {
@@ -106,6 +109,13 @@ class SetupActivity : AppCompatActivity() {
                 progressBar.visibility = if (newProgress < 100) View.VISIBLE else View.INVISIBLE
             }
         }
+
+        // 网页能后退时返回键先退网页; 否则交给系统, 保留预测性返回动画
+        val webBack = object : OnBackPressedCallback(false) {
+            override fun handleOnBackPressed() = webView.goBack()
+        }
+        onBackPressedDispatcher.addCallback(this, webBack)
+        webBackCallback = webBack
 
         doneBtn.setOnClickListener { tryFinish() }
         webView.loadUrl(PowerApi.AUTHORIZE_URL)
@@ -226,9 +236,6 @@ class SetupActivity : AppCompatActivity() {
         }
     }
 
-    override fun onBackPressed() {
-        if (webView.canGoBack()) webView.goBack() else super.onBackPressed()
-    }
 
     override fun onDestroy() {
         webView.destroy()

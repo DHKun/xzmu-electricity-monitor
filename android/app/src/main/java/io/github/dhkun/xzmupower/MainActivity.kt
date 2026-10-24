@@ -1,21 +1,24 @@
 package io.github.dhkun.xzmupower
 
 import android.Manifest
-import android.appwidget.AppWidgetManager
-import android.content.ComponentName
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.ValueAnimator
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.os.Build
 import android.os.Bundle
-import android.provider.Settings
+import android.view.HapticFeedbackConstants
 import android.view.View
+import android.view.ViewGroup
+import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.ColorUtils
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
@@ -27,39 +30,39 @@ import androidx.work.WorkManager
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.color.MaterialColors
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.materialswitch.MaterialSwitch
-import com.google.android.material.progressindicator.CircularProgressIndicator
-import com.google.android.material.snackbar.Snackbar
+import com.google.android.material.progressindicator.LinearProgressIndicator
 import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
+/** 首页: 仿 Pixel 天气, 只放数据; 设置项在 SettingsActivity */
 class MainActivity : AppCompatActivity() {
 
     private val exec = Executors.newSingleThreadExecutor()
     private lateinit var swipe: SwipeRefreshLayout
     private var querying = false
     private var errorText: String? = null
+    /** 本页创建时是否用了壁纸取色; 设置里切换后回到首页需要重建 */
+    private var appliedDynamic = false
+    private var shownQty = -1f
 
     private val notifyPermission =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            // 拒绝过且系统不再弹框时, 直接去系统通知设置
-            if (!granted && !shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)) {
-                openNotificationSettings()
-            }
-            render()
-        }
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         AlertNotify.ensureChannels(this)
+        // 调试构建: adb shell am start -n <包名>/.MainActivity --ez xzmu.demo true 写入示例数据
+        if (BuildConfig.DEBUG && intent.getBooleanExtra("xzmu.demo", false)) {
+            Prefs.seedDemo(this)
+        }
         if (!Prefs.configured(this)) {
             startActivity(Intent(this, SetupActivity::class.java))
             finish()
             return
         }
+        appliedDynamic = Prefs.dynamicColor(this)
         setContentView(R.layout.activity_main)
 
         // 底部手势条留白, 内容可滚到其下方
@@ -71,9 +74,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<MaterialToolbar>(R.id.toolbar).setOnMenuItemClickListener {
-            if (it.itemId == R.id.action_refresh) {
-                swipe.isRefreshing = true
-                query()
+            when (it.itemId) {
+                R.id.action_refresh -> {
+                    swipe.isRefreshing = true
+                    query()
+                }
+                R.id.action_settings -> startActivity(Intent(this, SettingsActivity::class.java))
             }
             true
         }
@@ -81,17 +87,13 @@ class MainActivity : AppCompatActivity() {
         swipe.setColorSchemeColors(MaterialColors.getColor(swipe, androidx.appcompat.R.attr.colorPrimary))
         swipe.setOnRefreshListener { query() }
 
-        findViewById<View>(R.id.rowNotify).setOnClickListener { toggleNotify() }
-        findViewById<View>(R.id.rowThreshold).setOnClickListener { pickThreshold() }
-        findViewById<View>(R.id.rowWidget).setOnClickListener { pinWidget(it) }
-        findViewById<View>(R.id.rowAuto).setOnClickListener {
-            Snackbar.make(it, "由系统 WorkManager 调度, 省电模式下可能延后", Snackbar.LENGTH_SHORT).show()
+        setupTiles()
+        findViewById<View>(R.id.bannerBtn).setOnClickListener {
+            startActivity(Intent(this, SetupActivity::class.java).putExtra(SetupActivity.EXTRA_REBIND, true))
         }
-        findViewById<View>(R.id.rowRebind).setOnClickListener { openSetup() }
-        findViewById<View>(R.id.bannerBtn).setOnClickListener { openSetup() }
 
         schedulePeriodic()
-        if (Build.VERSION.SDK_INT >= 33 && !notificationsOn()) {
+        if (Actions.needsPermissionPrompt(this)) {
             notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
@@ -99,6 +101,10 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         if (!Prefs.configured(this)) return
+        if (Prefs.dynamicColor(this) != appliedDynamic) {
+            recreate()
+            return
+        }
         render()
         if (System.currentTimeMillis() - Prefs.lastCheck(this) > 60_000) {
             swipe.isRefreshing = true
@@ -106,14 +112,42 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun openSetup() {
-        // 不清空现有绑定: 新房间验证成功后才替换
-        startActivity(Intent(this, SetupActivity::class.java).putExtra(SetupActivity.EXTRA_REBIND, true))
+    private fun tile(id: Int): View = findViewById(id)
+
+    private fun setupTiles() {
+        fun init(id: Int, icon: Int, title: String) {
+            tile(id).findViewById<ImageView>(R.id.tileIcon).setImageResource(icon)
+            tile(id).findViewById<TextView>(R.id.tileTitle).text = title
+        }
+        init(R.id.tileRemain, R.drawable.ic_battery, "余量")
+        init(R.id.tileDaily, R.drawable.ic_bolt, "日均用电")
+        init(R.id.tileRunOut, R.drawable.ic_event, "预计用完")
+        init(R.id.tileThreshold, R.drawable.ic_notifications, "提醒阈值")
+        tile(R.id.tileThreshold).setOnClickListener { Actions.pickThreshold(this) { render() } }
+
+        // 中等宽度单列时 4 张小卡排成一行
+        if (resources.getBoolean(R.bool.tiles_one_row)) {
+            val row1 = findViewById<LinearLayout>(R.id.tileRow1)
+            val row2 = findViewById<LinearLayout>(R.id.tileRow2)
+            listOf(R.id.tileRunOut, R.id.tileThreshold).forEach { id ->
+                val v = tile(id)
+                (v.parent as ViewGroup).removeView(v)
+                row1.addView(v)
+            }
+            row2.visibility = View.GONE
+        }
+    }
+
+    private fun setTile(id: Int, value: String, unit: String, desc: String) {
+        tile(id).findViewById<TextView>(R.id.tileValue).text = value
+        tile(id).findViewById<TextView>(R.id.tileUnit).text = unit
+        tile(id).findViewById<TextView>(R.id.tileDesc).text = desc
     }
 
     private fun query() {
         if (querying) return
         querying = true
+        render()
         exec.execute {
             val r = PowerSync.sync(this)
             runOnUiThread {
@@ -124,6 +158,9 @@ class MainActivity : AppCompatActivity() {
                     !r.ok -> "查询失败: ${r.message}"
                     else -> null
                 }
+                if (r.ok && Build.VERSION.SDK_INT >= 30) {
+                    swipe.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                }
                 render()
             }
         }
@@ -132,30 +169,90 @@ class MainActivity : AppCompatActivity() {
     private fun render() {
         val v = PowerStatus.load(this)
         findViewById<TextView>(R.id.roomText).text = v.room.ifBlank { "我的宿舍" }
-        findViewById<TextView>(R.id.qtyText).text = PowerStatus.fmtQty(v.qty)
-        findViewById<TextView>(R.id.percentText).text = "${v.percent}%"
-        findViewById<TextView>(R.id.timeText).text =
-            if (querying) "正在查询…" else PowerStatus.fmtTime(v.lastAt)
-        findViewById<CircularProgressIndicator>(R.id.ring).setProgressCompat(v.percent, true)
-
-        findViewById<View>(R.id.levelPill).visibility = if (v.qty >= 0) View.VISIBLE else View.INVISIBLE
-        findViewById<TextView>(R.id.levelText).text = v.level.text
-        findViewById<View>(R.id.levelDot).backgroundTintList = ColorStateList.valueOf(levelColor(v.level))
-
-        findViewById<TextView>(R.id.daysText).text = if (v.daysLeft >= 0) v.daysLeft.toString() else "--"
-        findViewById<TextView>(R.id.daysSub).text = if (v.daysLeft >= 0) "按近期用电估算" else "数据积累中"
-        findViewById<TextView>(R.id.dailyText).text =
-            if (v.dailyUse > 0) String.format(Locale.CHINA, "%.1f", v.dailyUse) else "--"
-        findViewById<TextView>(R.id.dailySub).text = if (v.dailyUse > 0) "自上次充值以来" else "至少需要 6 小时数据"
+        renderHero(v)
 
         val banner = errorText ?: if (v.sessionDead) "登录已过期, 重新登录后即可恢复查询" else null
         findViewById<MaterialCardView>(R.id.banner).visibility = if (banner != null) View.VISIBLE else View.GONE
         findViewById<TextView>(R.id.bannerText).text = banner
 
-        val on = notificationsOn()
-        findViewById<MaterialSwitch>(R.id.notifySwitch).isChecked = on
-        findViewById<TextView>(R.id.notifySub).text = if (on) "低于阈值时提醒充值" else "已关闭, 点按开启"
-        findViewById<TextView>(R.id.thresholdSub).text = "剩余低于 ${PowerStatus.fmtQty(v.threshold)} 度时提醒"
+        findViewById<TextView>(R.id.weekAvgText).text =
+            if (v.dailyUse > 0) String.format(Locale.CHINA, "日均 %.1f 度", v.dailyUse) else "数据积累中"
+        findViewById<WeekChartView>(R.id.weekChart).setDays(v.week, animate = true)
+
+        setTile(R.id.tileRemain, "${v.percent}", "%", "以上次充值后为满格")
+        tile(R.id.tileRemain).findViewById<LinearProgressIndicator>(R.id.tileBar).apply {
+            visibility = View.VISIBLE
+            setProgressCompat(v.percent, true)
+        }
+        setTile(R.id.tileDaily,
+            if (v.dailyUse > 0) String.format(Locale.CHINA, "%.1f", v.dailyUse) else "--", "度",
+            if (v.dailyUse > 0) "自上次充值以来" else "至少需要 6 小时数据")
+        setTile(R.id.tileRunOut,
+            if (v.daysLeft >= 0) PowerStatus.runOutDate(v.daysLeft) else "--", "",
+            if (v.daysLeft >= 0) "约 ${v.daysLeft} 天后" else "按近期用电估算")
+        setTile(R.id.tileThreshold, PowerStatus.fmtQty(v.threshold), "度", "低于时通知 · 点按修改")
+    }
+
+    /** 主卡底色随电量: 充足主色容器, 偏低第三色(暖色)容器, 不足错误色容器 */
+    private fun renderHero(v: PowerView) {
+        val (bgAttr, fgAttr) = when (v.level) {
+            PowerLevel.OK -> com.google.android.material.R.attr.colorPrimaryContainer to
+                    com.google.android.material.R.attr.colorOnPrimaryContainer
+            PowerLevel.WARN -> com.google.android.material.R.attr.colorTertiaryContainer to
+                    com.google.android.material.R.attr.colorOnTertiaryContainer
+            PowerLevel.LOW -> com.google.android.material.R.attr.colorErrorContainer to
+                    com.google.android.material.R.attr.colorOnErrorContainer
+            PowerLevel.UNKNOWN -> com.google.android.material.R.attr.colorSecondaryContainer to
+                    com.google.android.material.R.attr.colorOnSecondaryContainer
+        }
+        val card = findViewById<MaterialCardView>(R.id.heroCard)
+        val fg = MaterialColors.getColor(card, fgAttr)
+        val fgSoft = ColorUtils.setAlphaComponent(fg, 0xC0)
+        card.setCardBackgroundColor(MaterialColors.getColor(card, bgAttr))
+
+        val qtyText = findViewById<TextView>(R.id.qtyText)
+        qtyText.setTextColor(fg)
+        animateQty(qtyText, v.qty)
+        findViewById<TextView>(R.id.unitText).setTextColor(fgSoft)
+        findViewById<TextView>(R.id.timeText).apply {
+            setTextColor(fgSoft)
+            text = if (querying) "正在查询…" else PowerStatus.fmtTime(v.lastAt)
+        }
+        findViewById<TextView>(R.id.summaryText).apply {
+            setTextColor(fg)
+            text = when {
+                v.qty < 0 -> "暂无数据, 下拉刷新"
+                v.daysLeft >= 0 -> "约可用 ${v.daysLeft} 天 · 预计 ${PowerStatus.runOutDate(v.daysLeft)} 用完"
+                else -> "继续使用几天后可估算可用天数"
+            }
+        }
+        findViewById<View>(R.id.levelPill).visibility = if (v.qty >= 0) View.VISIBLE else View.INVISIBLE
+        findViewById<TextView>(R.id.levelText).text = v.level.text
+        findViewById<View>(R.id.levelDot).backgroundTintList = ColorStateList.valueOf(levelColor(v.level))
+    }
+
+    /** 读数变化时数字滚动过去 */
+    private fun animateQty(view: TextView, target: Float) {
+        if (target < 0 || shownQty < 0 || shownQty == target) {
+            view.text = PowerStatus.fmtQty(target)
+            shownQty = target
+            return
+        }
+        val from = shownQty
+        shownQty = target
+        val decimals = target != target.toLong().toFloat()
+        ValueAnimator.ofFloat(from, target).apply {
+            duration = 700
+            addUpdateListener {
+                val x = it.animatedValue as Float
+                view.text = if (decimals) String.format(Locale.CHINA, "%.1f", x) else x.toLong().toString()
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    view.text = PowerStatus.fmtQty(target)
+                }
+            })
+        }.start()
     }
 
     private fun levelColor(level: PowerLevel): Int = when (level) {
@@ -163,55 +260,6 @@ class MainActivity : AppCompatActivity() {
         PowerLevel.WARN -> ContextCompat.getColor(this, R.color.level_warn)
         PowerLevel.LOW -> MaterialColors.getColor(swipe, androidx.appcompat.R.attr.colorError)
         PowerLevel.UNKNOWN -> MaterialColors.getColor(swipe, com.google.android.material.R.attr.colorOutline)
-    }
-
-    private fun pickThreshold() {
-        val values = arrayOf(5f, 10f, 15f, 20f, 30f, 50f, 80f, 100f)
-        val current = values.indexOfFirst { it == Prefs.threshold(this) }
-        MaterialAlertDialogBuilder(this)
-            .setTitle("提醒阈值")
-            .setSingleChoiceItems(values.map { "${PowerStatus.fmtQty(it)} 度" }.toTypedArray(), current) { d, i ->
-                Prefs.setThreshold(this, values[i])
-                AlertEval.reevaluateWithLast(this)
-                PowerWidget.updateAll(this)
-                render()
-                d.dismiss()
-            }
-            .setNegativeButton("取消", null)
-            .show()
-    }
-
-    /** 系统"添加小组件"对话框; 不支持的启动器提示手动添加 */
-    private fun pinWidget(anchor: View) {
-        val mgr = AppWidgetManager.getInstance(this)
-        if (mgr.isRequestPinAppWidgetSupported) {
-            mgr.requestPinAppWidget(ComponentName(this, PowerWidget::class.java), null, null)
-        } else {
-            Snackbar.make(anchor, "请长按桌面空白处 → 小组件, 找到民大电费", Snackbar.LENGTH_LONG).show()
-        }
-    }
-
-    private fun notificationsOn(): Boolean {
-        val granted = Build.VERSION.SDK_INT < 33 ||
-                ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
-                PackageManager.PERMISSION_GRANTED
-        return granted && NotificationManagerCompat.from(this).areNotificationsEnabled()
-    }
-
-    /** 未授权先走系统授权框, 其余情况(含关闭)进系统通知设置 */
-    private fun toggleNotify() {
-        if (Build.VERSION.SDK_INT >= 33 &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
-            PackageManager.PERMISSION_GRANTED) {
-            notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-        } else {
-            openNotificationSettings()
-        }
-    }
-
-    private fun openNotificationSettings() {
-        startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-            .putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
     }
 
     private fun schedulePeriodic() {

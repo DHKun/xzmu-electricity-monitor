@@ -92,6 +92,13 @@ class PowerWidget : AppWidgetProvider() {
             val time = if (v.lastAt > 0) SimpleDateFormat("HH:mm", Locale.CHINA).format(Date(v.lastAt)) else ""
 
             return RemoteViews(ctx.packageName, if (wide) R.layout.widget_wide else R.layout.widget_small).apply {
+                // 底色随电量, 与首页主卡一致
+                setInt(android.R.id.background, "setBackgroundResource", when (v.level) {
+                    PowerLevel.OK -> R.drawable.widget_bg
+                    PowerLevel.WARN -> R.drawable.widget_bg_warn
+                    PowerLevel.LOW -> R.drawable.widget_bg_low
+                    PowerLevel.UNKNOWN -> R.drawable.widget_bg_none
+                })
                 setOnClickPendingIntent(android.R.id.background, open)
                 setOnClickPendingIntent(R.id.wRefresh, refresh)
                 setTextViewText(R.id.wRoom, v.room.ifBlank { "我的宿舍" })

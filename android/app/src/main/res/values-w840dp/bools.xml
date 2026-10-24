@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 两栏时右侧卡片区变窄, 回到 2×2 -->
+    <bool name="tiles_one_row">false</bool>
+</resources>

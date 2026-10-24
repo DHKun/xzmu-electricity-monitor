@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 设置页左右留白: 手机贴边, 平板居中限宽 -->
+    <dimen name="settings_side_pad">16dp</dimen>
+</resources>

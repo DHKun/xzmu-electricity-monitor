@@ -19,9 +19,10 @@
 
 ## 安卓 App
 
-**直接下载**：[Releases](https://github.com/DHKun/xzmu-electricity-monitor/releases) 里的 `MinDaPower-v1.2.0.apk`，安装后按提示登录选房即可。
+**直接下载**：[Releases](https://github.com/DHKun/xzmu-electricity-monitor/releases) 里的 `MinDaPower-v1.3.0.apk`，安装后按提示登录选房即可。
 
-Material 3 界面：大标题顶栏、电量圆环、预计可用天数与日均用电估算、分组设置列表，深浅色适配。
+Material 3 界面（参照 Pixel 天气 / 设置）：主卡颜色随电量变化，近 7 天用电柱状图，余量 / 日均用电 / 预计用完 / 提醒阈值信息卡；
+设置单独成页，可选跟随壁纸取色（Material You）；平板横屏两栏、竖屏信息卡一行四张；深浅色适配。
 桌面小组件：默认 2×2，拉宽到 4×2 自动切换为圆环布局，组件上可直接刷新。
 
 鸿蒙版见 [`harmonyos/README.md`](harmonyos/README.md)，Releases 里提供未签名 HAP。

@@ -20,9 +20,9 @@
     <color name="m3_on_secondary">#FFFFFF</color>
     <color name="m3_secondary_container">#6E7488</color>
     <color name="m3_on_secondary_container">#FFFFFF</color>
-    <color name="m3_tertiary">#553A55</color>
+    <color name="m3_tertiary">#6A3F00</color>
     <color name="m3_on_tertiary">#FFFFFF</color>
-    <color name="m3_tertiary_container">#8A6A89</color>
+    <color name="m3_tertiary_container">#A8662A</color>
     <color name="m3_on_tertiary_container">#FFFFFF</color>
     <color name="m3_error">#8C0009</color>
     <color name="m3_on_error">#FFFFFF</color>

@@ -11,9 +11,9 @@
     <color name="m3_on_secondary">#0F1626</color>
     <color name="m3_secondary_container">#8A90A5</color>
     <color name="m3_on_secondary_container">#000000</color>
-    <color name="m3_tertiary">#E4BFE2</color>
-    <color name="m3_on_tertiary">#240D26</color>
-    <color name="m3_tertiary_container">#A886A6</color>
+    <color name="m3_tertiary">#FFB870</color>
+    <color name="m3_on_tertiary">#2C1600</color>
+    <color name="m3_tertiary_container">#C98A4B</color>
     <color name="m3_on_tertiary_container">#000000</color>
     <color name="m3_error">#FFBAB1</color>
     <color name="m3_on_error">#370001</color>

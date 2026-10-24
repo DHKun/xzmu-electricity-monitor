@@ -7,4 +7,10 @@
         android:title="刷新"
         app:iconTint="?attr/colorOnSurfaceVariant"
         app:showAsAction="always" />
+    <item
+        android:id="@+id/action_settings"
+        android:icon="@drawable/ic_settings"
+        android:title="设置"
+        app:iconTint="?attr/colorOnSurfaceVariant"
+        app:showAsAction="always" />
 </menu>
