@@ -105,11 +105,18 @@ struct Setup {
   tryFinish(): void {
     const payProId: string = this.pendingPayProId;
     const roomVerify: string = this.pendingRoomVerify;
-    if (payProId.length === 0 || roomVerify.length === 0 || this.binding) {
+    if (this.binding) {
+      return;
+    }
+    if (payProId.length === 0 || roomVerify.length === 0) {
+      this.getUIContext().getPromptAction().showToast({ message: '请先在页面中选择房间' });
       return;
     }
     this.binding = true;
-    const cookie: string = PowerApi.sessionCookie();
+    let cookie: string = PowerApi.sessionCookie();
+    if (cookie.length === 0) {
+      cookie = Prefs.getCookieSnapshot();
+    }
     queryUrl(PowerApi.roomStateUrl(payProId, roomVerify), cookie, PowerApi.referer(payProId))
       .then((r: RoomState) => {
         this.binding = false;
@@ -161,6 +168,11 @@ struct Setup {
           const url: string = event.data.getRequestUrl();
           this.handleIntercept(url);
           return false;
+        })
+        .onInterceptRequest((event: OnInterceptRequestEvent): WebResourceResponse => {
+          // XHR 等资源请求只走这里(等价安卓 shouldInterceptRequest), 空响应=放行
+          this.handleIntercept(event.request.getRequestUrl());
+          return new WebResourceResponse();
         })
         .onPageEnd((event: OnPageEndEvent) => {
           const url: string = event.url;
