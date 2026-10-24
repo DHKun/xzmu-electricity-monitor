@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.App" parent="Theme.Material3.Light.NoActionBar" />
+    <style name="Theme.App" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:windowBackground">@color/ios_bg</item>
+        <item name="android:statusBarColor">@color/ios_bg</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:colorAccent">@color/ios_orange</item>
+    </style>
 </resources>

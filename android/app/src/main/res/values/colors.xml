@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- iOS 系统色板 -->
+    <color name="ios_bg">#F2F2F7</color>
+    <color name="ios_card">#FFFFFF</color>
+    <color name="ios_label">#000000</color>
+    <color name="ios_secondary_label">#8E8E93</color>
+    <color name="ios_separator">#C6C6C8</color>
+    <color name="ios_orange">#FF9500</color>
+    <color name="ios_orange_dark">#E6850A</color>
+    <color name="ios_red">#FF3B30</color>
+    <color name="ios_fill">#EFEFF4</color>
+</resources>

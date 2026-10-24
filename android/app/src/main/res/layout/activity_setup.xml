@@ -2,17 +2,34 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="@color/ios_bg"
     android:orientation="vertical">
 
-    <TextView
-        android:id="@+id/hintText"
+    <!-- 顶部步骤提示条 -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="#FFF3E0"
-        android:padding="12dp"
-        android:text="① 请登录(完美校园帐号或校园卡认证)"
-        android:textSize="14sp"
-        android:textColor="#B25B00" />
+        android:background="@color/ios_card"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/hintText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:paddingStart="16dp"
+            android:paddingTop="14dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="14dp"
+            android:text="① 请登录(完美校园帐号或校园卡认证)"
+            android:textColor="@color/ios_label"
+            android:textSize="15sp" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/ios_separator" />
+    </LinearLayout>
 
     <WebView
         android:id="@+id/webView"
@@ -25,12 +42,20 @@
         style="?android:attr/progressBarStyleHorizontal"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:max="100" />
+        android:progressTint="@color/ios_orange"
+        android:progressBackgroundTint="@color/ios_fill" />
 
     <Button
         android:id="@+id/doneBtn"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_margin="12dp"
-        android:text="我已看到剩余电量, 完成绑定" />
+        android:layout_height="52dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
+        android:background="@drawable/btn_primary"
+        android:text="我已看到剩余电量, 完成绑定"
+        android:textAllCaps="false"
+        android:textColor="#FFFFFF"
+        android:textSize="17sp" />
 </LinearLayout>
