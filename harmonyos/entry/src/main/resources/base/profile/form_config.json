@@ -2,18 +2,35 @@
   "forms": [
     {
       "name": "PowerCard",
-      "displayName": "$string:app_name",
-      "description": "宿舍剩余电量卡片",
+      "displayName": "$string:form_name",
+      "description": "$string:form_desc",
       "src": "./ets/form/PowerCard.ets",
       "uiSyntax": "arkts",
-      "window": { "designWidth": 720 },
+      "window": { "designWidth": 720, "autoDesignWidth": true },
       "colorMode": "auto",
+      "isDynamic": true,
       "isDefault": true,
       "updateEnabled": true,
       "scheduledUpdateTime": "06:00",
-      "updateDuration": 2,
+      "updateDuration": 4,
       "defaultDimension": "2*2",
       "supportDimensions": ["2*2"]
+    },
+    {
+      "name": "PowerCardWide",
+      "displayName": "$string:form_name",
+      "description": "$string:form_wide_desc",
+      "src": "./ets/form/PowerCardWide.ets",
+      "uiSyntax": "arkts",
+      "window": { "designWidth": 720, "autoDesignWidth": true },
+      "colorMode": "auto",
+      "isDynamic": true,
+      "isDefault": false,
+      "updateEnabled": true,
+      "scheduledUpdateTime": "06:00",
+      "updateDuration": 4,
+      "defaultDimension": "2*4",
+      "supportDimensions": ["2*4"]
     }
   ]
 }

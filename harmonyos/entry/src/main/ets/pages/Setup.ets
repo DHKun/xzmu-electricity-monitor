@@ -1,8 +1,11 @@
-import { router } from '@kit.ArkUI';
 import { common } from '@kit.AbilityKit';
 import { webview } from '@kit.ArkWeb';
+import { HdsNavDestination, HdsNavDestinationAttribute, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
 import { Prefs } from '../service/Prefs';
 import { PowerApi, queryUrl, RoomState } from '../service/PowerApi';
+import { CardSync } from '../service/PowerSync';
+
+const STEPS: string[] = ['登录', '选择项目', '选择房间'];
 
 let nativeHandler: ((url: string) => void) | null = null;
 
@@ -55,12 +58,14 @@ const POLL_SCRIPT: string = `(function(){
 
 const CONSOLE_PREFIX: string = 'XZMU_REPORT:';
 
-@Entry
 @Component
-struct Setup {
-  @State hintText: string = '① 请登录(完美校园帐号或校园卡认证)';
+export struct SetupPage {
+  @State step: number = 0;
+  @State hintText: string = '用完美校园帐号或校园卡认证登录';
   @State loading: number = 0;
   @State diagText: string = '';
+  @State verifying: boolean = false;
+  private stack: NavPathStack | null = null;
   private controller: webview.WebviewController = new webview.WebviewController();
   private pendingPayProId: string = '';
   private pendingRoomVerify: string = '';
@@ -74,7 +79,7 @@ struct Setup {
     nativeHandler = (url: string) => {
       this.handleIntercept(url);
     };
-    Prefs.init(getContext(this) as common.UIAbilityContext).catch(() => {});
+    Prefs.init(this.getUIContext().getHostContext() as common.UIAbilityContext);
     this.pollTimer = setInterval(() => {
       this.pollPage();
     }, 1000);
@@ -201,7 +206,7 @@ struct Setup {
     this.lastAttemptKey = key;
     this.pendingPayProId = payProId;
     this.pendingRoomVerify = roomVerify;
-    this.hintText = `检测到房间 ${roomVerify}, 正在验证会话…`;
+    this.hintText = `检测到房间 ${roomVerify}, 正在验证…`;
     this.tryFinish();
   }
 
@@ -216,6 +221,7 @@ struct Setup {
       return;
     }
     this.binding = true;
+    this.verifying = true;
     let cookie: string = PowerApi.sessionCookie();
     if (cookie.length === 0) {
       cookie = Prefs.getCookieSnapshot();
@@ -223,13 +229,17 @@ struct Setup {
     queryUrl(PowerApi.roomStateUrl(payProId, roomVerify), cookie, PowerApi.referer(payProId))
       .then((r: RoomState) => {
         this.binding = false;
+        this.verifying = false;
         if (r.ok && r.quantity > 0) {
           const label: string = r.roomLabel.length > 0 ? r.roomLabel : roomVerify;
           Prefs.saveBinding(payProId, roomVerify, label, cookie, r.quantity).then(() => {
+            CardSync.pushAll(false);
             this.getUIContext().getPromptAction().showToast({
-              message: `绑定成功! ${label} 剩余 ${r.quantity}${r.unit}`
+              message: `绑定成功 · ${label} 剩余 ${r.quantity}${r.unit}`
             });
-            router.back();
+            if (this.stack !== null) {
+              this.stack.pop('bound');
+            }
           });
         } else if (r.sessionDead) {
           this.hintText = '会话无效, 请重新登录后再选择房间';
@@ -239,95 +249,167 @@ struct Setup {
       })
       .catch(() => {
         this.binding = false;
+        this.verifying = false;
         this.hintText = '验证失败, 请重试';
       });
   }
 
-  build() {
-    Column() {
-      // 步骤提示条
-      Column() {
-        Text(this.hintText)
-          .fontSize(15)
-          .fontColor($r('app.color.power_label'))
-          .width('100%')
-          .textAlign(TextAlign.Center)
-          .padding(14)
-        if (this.diagText.length > 0) {
-          Text(this.diagText)
-            .fontSize(11)
-            .fontColor(Color.Gray)
-            .margin({ bottom: 6 })
+  @Builder
+  stepBar() {
+    Row() {
+      ForEach(STEPS, (label: string, i: number) => {
+        if (i > 0) {
+          Divider()
+            .strokeWidth(2)
+            .color(i <= this.step ? $r('app.color.power_accent') : $r('app.color.power_separator'))
+            .layoutWeight(1)
+            .margin({ left: 6, right: 6, bottom: 18 })
         }
-        Divider().color($r('app.color.power_separator')).strokeWidth(1)
-      }
-      .width('100%')
-      .backgroundColor($r('app.color.power_card'))
-
-      Web({ src: PowerApi.authorizeUrl(false), controller: this.controller })
-        .width('100%')
-        .layoutWeight(1)
-        .javaScriptAccess(true)
-        .domStorageAccess(true)
-        .userAgent(PowerApi.UA)
-        .onProgressChange((event: OnProgressChangeEvent) => {
-          this.loading = event.newProgress;
-        })
-        .javaScriptProxy({
-          object: new JsBridge(),
-          name: 'xzmuNative',
-          methodList: ['onRoomState'],
-          controller: this.controller
-        })
-        .onConsole((event: OnConsoleEvent) => {
-          const msg: string = event.message.getMessage();
-          if (msg.startsWith(CONSOLE_PREFIX)) {
-            this.handleIntercept(msg.substring(CONSOLE_PREFIX.length));
+        Column({ space: 4 }) {
+          Stack() {
+            if (i < this.step) {
+              SymbolGlyph($r('sys.symbol.checkmark'))
+                .fontSize(14)
+                .fontColor([Color.White])
+            } else {
+              Text(String(i + 1))
+                .fontSize(13)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(i === this.step ? Color.White : $r('app.color.power_secondary'))
+            }
           }
-          return false;
-        })
-        .onPageEnd((event: OnPageEndEvent) => {
-          const url: string = event.url;
-          this.currentUrl = url;
-          this.lastAttemptKey = '';
-          if (url.includes(PowerApi.HOST)) {
-            this.injectHook();
-          }
-          if (url.includes('api/authorize')) {
-            this.injectSchoolSearch();
-            this.controller.runJavaScript('document.title').then((title: string) => {
-              if (title.includes('提示') && !this.forceLoginTried) {
-                this.forceLoginTried = true;
-                this.controller.loadUrl(PowerApi.authorizeUrl(true));
-              }
-            });
-            const step: string = '① 请登录(完美校园帐号或校园卡认证)';
-            this.hintText = step;
-          } else if (url.includes('bill/type.do') || url.includes('pay.do')) {
-            this.hintText = '② 请点进您的宿舍用电项目(如"秦汉校区公寓用电")';
-          } else if (url.includes('selectPayProject.do')) {
-            this.hintText = '③ 请选择您的房间, 看到"剩余电量"后自动完成绑定';
-          }
-        })
+          .width(26)
+          .height(26)
+          .borderRadius(13)
+          .backgroundColor(i <= this.step ? $r('app.color.power_accent') : $r('app.color.power_fill'))
 
-      LoadingProgress().width(24).height(24).color($r('app.color.power_orange'))
-        .margin({ top: 8 }).visibility(this.loading > 0 && this.loading < 100 ? Visibility.Visible : Visibility.None)
-
-      Button('我已看到剩余电量, 完成绑定')
-        .width('100%')
-        .height(52)
-        .margin(16)
-        .fontSize(17)
-        .fontColor(Color.White)
-        .backgroundColor($r('app.color.power_orange'))
-        .borderRadius(14)
-        .onClick(() => this.tryFinish())
-
-      Blank().height(12)
+          Text(label)
+            .fontSize(12)
+            .fontColor(i === this.step ? $r('app.color.power_label') : $r('app.color.power_secondary'))
+        }
+      }, (label: string) => label)
     }
     .width('100%')
-    .height('100%')
+    .padding({ left: 24, right: 24 })
+  }
+
+  build() {
+    HdsNavDestination() {
+      Column() {
+        Column({ space: 10 }) {
+          this.stepBar()
+          Row({ space: 6 }) {
+            if (this.verifying) {
+              LoadingProgress().width(16).height(16).color($r('app.color.power_accent'))
+            }
+            Text(this.hintText)
+              .fontSize(13)
+              .fontColor($r('app.color.power_secondary'))
+              .textAlign(TextAlign.Center)
+          }
+          if (this.diagText.length > 0) {
+            Text(this.diagText)
+              .fontSize(10)
+              .fontColor($r('app.color.power_tertiary'))
+          }
+        }
+        .width('100%')
+        .padding({ top: 4, bottom: 12 })
+
+        Stack({ alignContent: Alignment.Top }) {
+          Web({ src: PowerApi.authorizeUrl(false), controller: this.controller })
+            .width('100%')
+            .height('100%')
+            .javaScriptAccess(true)
+            .domStorageAccess(true)
+            .userAgent(PowerApi.UA)
+            .onProgressChange((event: OnProgressChangeEvent) => {
+              this.loading = event.newProgress;
+            })
+            .javaScriptProxy({
+              object: new JsBridge(),
+              name: 'xzmuNative',
+              methodList: ['onRoomState'],
+              controller: this.controller
+            })
+            .onConsole((event: OnConsoleEvent) => {
+              const msg: string = event.message.getMessage();
+              if (msg.startsWith(CONSOLE_PREFIX)) {
+                this.handleIntercept(msg.substring(CONSOLE_PREFIX.length));
+              }
+              return false;
+            })
+            .onPageEnd((event: OnPageEndEvent) => {
+              const url: string = event.url;
+              this.currentUrl = url;
+              this.lastAttemptKey = '';
+              if (url.includes(PowerApi.HOST)) {
+                this.injectHook();
+              }
+              if (url.includes('api/authorize')) {
+                this.injectSchoolSearch();
+                this.controller.runJavaScript('document.title').then((title: string) => {
+                  if (title.includes('提示') && !this.forceLoginTried) {
+                    this.forceLoginTried = true;
+                    this.controller.loadUrl(PowerApi.authorizeUrl(true));
+                  }
+                });
+                this.step = 0;
+                this.hintText = '用完美校园帐号或校园卡认证登录';
+              } else if (url.includes('bill/type.do') || url.includes('pay.do')) {
+                this.step = 1;
+                this.hintText = '点进宿舍用电项目, 如"秦汉校区公寓用电"';
+              } else if (url.includes('selectPayProject.do')) {
+                this.step = 2;
+                this.hintText = '选择房间, 显示剩余电量后自动完成绑定';
+              }
+            })
+
+          // 顶部细进度条, 替代原来的转圈
+          Progress({ value: this.loading, total: 100, type: ProgressType.Linear })
+            .width('100%')
+            .height(2)
+            .color($r('app.color.power_accent'))
+            .backgroundColor(Color.Transparent)
+            .style({ strokeWidth: 2 })
+            .visibility(this.loading > 0 && this.loading < 100 ? Visibility.Visible : Visibility.None)
+        }
+        .width('100%')
+        .layoutWeight(1)
+        .borderRadius({ topLeft: 20, topRight: 20 })
+        .clip(true)
+
+        Button({ type: ButtonType.Capsule }) {
+          Row({ space: 8 }) {
+            if (this.verifying) {
+              LoadingProgress().width(20).height(20).color(Color.White)
+            }
+            Text(this.verifying ? '正在验证…' : '已看到剩余电量, 完成绑定')
+              .fontSize(16)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(Color.White)
+          }
+        }
+        .width('100%')
+        .height(48)
+        .backgroundColor($r('app.color.power_accent'))
+        .margin({ left: 16, right: 16, top: 10, bottom: 10 })
+        .enabled(!this.verifying)
+        .onClick(() => this.tryFinish())
+      }
+      .width('100%')
+      .height('100%')
+      .padding({ left: 0, right: 0 })
+    }
+    .titleBar({
+      content: {
+        title: { mainTitle: '绑定宿舍' }
+      }
+    })
+    .titleMode(HdsNavDestinationTitleMode.MINI)
     .backgroundColor($r('app.color.power_bg'))
-    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+    .onReady((ctx: NavDestinationContext) => {
+      this.stack = ctx.pathStack;
+    })
   }
 }

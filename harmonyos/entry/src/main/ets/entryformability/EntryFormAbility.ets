@@ -1,75 +1,67 @@
-import { FormExtensionAbility, formBindingData, formProvider, formInfo } from '@kit.FormKit';
+import { FormExtensionAbility, formBindingData, formInfo } from '@kit.FormKit';
 import { Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { Prefs } from '../service/Prefs';
-import { PowerApi, queryRoomState, RoomState } from '../service/PowerApi';
-
-class CardData {
-  qty: string = '--';
-  room: string = '';
-  time: string = '';
-  low: boolean = false;
-}
+import { CardData, CardSync, PowerSync } from '../service/PowerSync';
 
 const TAG: string = 'EntryFormAbility';
 const DOMAIN: number = 0x0000;
+/** 卡片刷新节流: 系统定时刷新或刚添加时, 10 分钟内查过就不再打接口 */
+const FRESH_MS: number = 10 * 60 * 1000;
 
 export default class EntryFormAbility extends FormExtensionAbility {
   onAddForm(want: Want): formBindingData.FormBindingData {
-    const formId: string = want.parameters !== undefined && want.parameters['ohos.extra.param.key.form_identity'] !== undefined
-      ? want.parameters['ohos.extra.param.key.form_identity'] as string : '';
-    hilog.info(DOMAIN, TAG, 'onAddForm %{public}s', formId);
+    // 卡片进程独立于 App, 必须自己初始化存储并读最新数据
+    Prefs.init(this.context);
+    const params: Record<string, Object> | undefined = want.parameters;
+    const formId: string = params !== undefined && params[formInfo.FormParam.IDENTITY_KEY] !== undefined
+      ? params[formInfo.FormParam.IDENTITY_KEY] as string : '';
+    hilog.info(DOMAIN, TAG, 'onAddForm %{public}s configured=%{public}s', formId, String(Prefs.getConfigured()));
     if (formId.length > 0) {
       Prefs.addFormId(formId).catch(() => {});
     }
-    // 首次添加: 先给静态数据, 异步查一次再刷
-    const card: CardData = new CardData();
-    card.qty = Prefs.getLastQty() >= 0 ? String(Prefs.getLastQty()) : '--';
-    card.room = Prefs.getConfigured() ? Prefs.getRoomLabel() : '未绑定';
-    card.time = '';
-    card.low = Prefs.getLastQty() >= 0 && Prefs.getLastQty() < Prefs.getThreshold();
-    const data: formBindingData.FormBindingData = formBindingData.createFormBindingData(card);
-    this.refreshCard(formId);
-    return data;
+    const card: CardData = CardSync.build(false);
+    if (Prefs.getConfigured() && Date.now() - Prefs.getLastAt() > FRESH_MS) {
+      this.refresh();
+    }
+    return formBindingData.createFormBindingData(card);
   }
 
-  /** 互动卡片"刷新"等事件 */
+  /** 互动卡片: 卡片上的刷新按钮(FormLink message) */
   onFormEvent(formId: string, message: string): void {
     hilog.info(DOMAIN, TAG, 'onFormEvent %{public}s %{public}s', formId, message);
-    this.refreshCard(formId);
+    Prefs.init(this.context);
+    if (!Prefs.getConfigured()) {
+      CardSync.pushAll(false);
+      return;
+    }
+    CardSync.pushAll(true);
+    this.refresh();
   }
 
   onUpdateForm(formId: string): void {
-    this.refreshCard(formId);
-  }
-
-  private refreshCard(formId: string): void {
-    if (!Prefs.getConfigured()) {
-      return;
+    Prefs.init(this.context);
+    if (Prefs.getFormIds().indexOf(formId) < 0) {
+      Prefs.addFormId(formId).catch(() => {});
     }
-    const payProId: string = Prefs.getPayProId();
-    const roomVerify: string = Prefs.getRoomVerify();
-    // 扩展进程无 WebView, 直接用快照 Cookie
-    const cookie: string = Prefs.getCookieSnapshot();
-    queryRoomState(payProId, roomVerify, cookie).then((r: RoomState) => {
-      if (!r.ok || r.quantity <= 0) {
-        return;
-      }
-      Prefs.setLastQty(r.quantity).then(() => {
-        const time: string = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-        const card: CardData = new CardData();
-        card.qty = String(r.quantity);
-        card.room = r.roomLabel.length > 0 ? r.roomLabel : Prefs.getRoomLabel();
-        card.time = time;
-        card.low = r.quantity < Prefs.getThreshold();
-        const data: formBindingData.FormBindingData = formBindingData.createFormBindingData(card);
-        formProvider.updateForm(formId, data).catch(() => {});
-      });
-    }).catch(() => {});
+    if (Prefs.getConfigured() && Date.now() - Prefs.getLastAt() > FRESH_MS) {
+      this.refresh();
+    } else {
+      CardSync.push(formId, CardSync.build(false));
+    }
   }
 
   onRemoveForm(formId: string): void {
     hilog.info(DOMAIN, TAG, 'onRemoveForm %{public}s', formId);
+    Prefs.init(this.context);
     Prefs.removeFormId(formId).catch(() => {});
+  }
+
+  /** 卡片进程拿不到 WebView 会话, 用快照 Cookie; 结果由 PowerSync 推到所有卡片 */
+  private refresh(): void {
+    PowerSync.syncNow('').catch((e: Error) => {
+      hilog.warn(DOMAIN, TAG, 'sync failed: %{public}s', e.message);
+      CardSync.pushAll(false);
+    });
   }
 }

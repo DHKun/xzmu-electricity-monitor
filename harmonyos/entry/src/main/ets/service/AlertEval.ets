@@ -4,8 +4,8 @@ import { Prefs } from './Prefs';
 /** 阈值评估: 手动查询、修改阈值、后台轮询三条路径共用 */
 export class AlertEval {
 
+  /** 只负责提醒; 读数由 Prefs.recordReading 落盘 */
   static async evaluate(quantity: number, unit: string): Promise<void> {
-    await Prefs.setLastQty(quantity);
     const threshold: number = Prefs.getThreshold();
     if (quantity < threshold) {
       if (!Prefs.isAlerted()) {

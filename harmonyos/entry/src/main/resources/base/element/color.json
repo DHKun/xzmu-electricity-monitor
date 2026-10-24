@@ -1,12 +1,18 @@
 {
   "color": [
-    { "name": "power_bg", "value": "#F2F2F7" },
+    { "name": "power_bg", "value": "#F1F3F5" },
     { "name": "power_card", "value": "#FFFFFF" },
-    { "name": "power_label", "value": "#000000" },
-    { "name": "power_secondary", "value": "#8E8E93" },
-    { "name": "power_separator", "value": "#C6C6C8" },
-    { "name": "power_orange", "value": "#FF9500" },
-    { "name": "power_red", "value": "#FF3B30" },
-    { "name": "power_fill", "value": "#EFEFF4" }
+    { "name": "power_label", "value": "#E5000000" },
+    { "name": "power_secondary", "value": "#99000000" },
+    { "name": "power_tertiary", "value": "#66000000" },
+    { "name": "power_separator", "value": "#1A000000" },
+    { "name": "power_track", "value": "#14000000" },
+    { "name": "power_accent", "value": "#FF7A00" },
+    { "name": "power_accent_soft", "value": "#1FFF7A00" },
+    { "name": "power_glow", "value": "#38FF9F45" },
+    { "name": "power_green", "value": "#41BA41" },
+    { "name": "power_orange", "value": "#FF8A00" },
+    { "name": "power_red", "value": "#E84026" },
+    { "name": "power_fill", "value": "#0D000000" }
   ]
 }

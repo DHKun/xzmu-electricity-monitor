@@ -3,6 +3,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { Prefs } from '../service/Prefs';
 import { workScheduler } from '@kit.BackgroundTasksKit';
+import { webview } from '@kit.ArkWeb';
 
 const DOMAIN: number = 0x0000;
 const TAG: string = 'EntryAbility';
@@ -10,9 +11,14 @@ const TAG: string = 'EntryAbility';
 export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     hilog.info(DOMAIN, TAG, 'onCreate');
-    Prefs.init(this.context).then(() => {
-      this.schedulePeriodicWork();
-    });
+    Prefs.init(this.context);
+    // 首页要从 WebCookieManager 取实时会话, 内核须先初始化
+    try {
+      webview.WebviewController.initializeWebEngine();
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, 'initializeWebEngine failed: %{public}s', String(e));
+    }
+    this.schedulePeriodicWork();
   }
 
   /** 后台周期查询(WorkScheduler, 系统择机执行) */

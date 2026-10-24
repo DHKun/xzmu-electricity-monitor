@@ -1,12 +1,18 @@
 {
   "color": [
     { "name": "power_bg", "value": "#000000" },
-    { "name": "power_card", "value": "#1C1C1E" },
-    { "name": "power_label", "value": "#FFFFFF" },
-    { "name": "power_secondary", "value": "#98989E" },
-    { "name": "power_separator", "value": "#38383A" },
-    { "name": "power_orange", "value": "#FF9F0A" },
-    { "name": "power_red", "value": "#FF453A" },
-    { "name": "power_fill", "value": "#2C2C2E" }
+    { "name": "power_card", "value": "#202224" },
+    { "name": "power_label", "value": "#E5FFFFFF" },
+    { "name": "power_secondary", "value": "#99FFFFFF" },
+    { "name": "power_tertiary", "value": "#66FFFFFF" },
+    { "name": "power_separator", "value": "#26FFFFFF" },
+    { "name": "power_track", "value": "#1FFFFFFF" },
+    { "name": "power_accent", "value": "#FF9A2E" },
+    { "name": "power_accent_soft", "value": "#33FF9A2E" },
+    { "name": "power_glow", "value": "#33FF7A00" },
+    { "name": "power_green", "value": "#5BC85B" },
+    { "name": "power_orange", "value": "#FF9A2E" },
+    { "name": "power_red", "value": "#F3553A" },
+    { "name": "power_fill", "value": "#14FFFFFF" }
   ]
 }
