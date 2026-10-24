@@ -17,15 +17,25 @@ class JsBridge {
 }
 
 const HOOK_SCRIPT: string = `(function(){
-  if (window.__xzmuHooked) return;
-  window.__xzmuHooked = true;
-  function report(u){ try { if (String(u).indexOf('getRoomState.do') >= 0 && window.xzmuNative) { window.xzmuNative.onRoomState(String(u)); } } catch(e) {} }
+  if (window.__xzmuScan) return;
+  window.__xzmuScan = true;
+  function report(u){ try { if (window.xzmuNative) window.xzmuNative.onRoomState(String(u)); } catch(e) {} }
   var origOpen = XMLHttpRequest.prototype.open;
-  XMLHttpRequest.prototype.open = function(method, url){ report(url); return origOpen.apply(this, arguments); };
+  XMLHttpRequest.prototype.open = function(method, url){ try { report(url); } catch(e) {} return origOpen.apply(this, arguments); };
   if (window.fetch) {
     var origFetch = window.fetch;
-    window.fetch = function(input, init){ report(typeof input === 'string' ? input : (input && input.url) || ''); return origFetch.apply(this, arguments); };
+    window.fetch = function(input, init){ try { report(typeof input === 'string' ? input : (input && input.url) || ''); } catch(e) {} return origFetch.apply(this, arguments); };
   }
+  var n = 0;
+  var t = setInterval(function(){
+    n++;
+    var ta = document.getElementById('thirdAccount');
+    var m = location.href.match(/[?&]payProId=([0-9]+)/);
+    if (ta && ta.value && m) {
+      clearInterval(t);
+      report('getRoomState.do?payProId=' + m[1] + '&roomverify=' + encodeURIComponent(ta.value));
+    } else if (n > 60) { clearInterval(t); }
+  }, 500);
 })()`;
 
 @Entry
@@ -195,11 +205,12 @@ struct Setup {
         .onProgressChange((event: OnProgressChangeEvent) => {
           this.loading = event.newProgress;
         })
-        .onControllerAttached(() => {
-          this.controller.registerJavaScriptProxy(new JsBridge(), 'xzmuNative', ['onRoomState']);
-          this.controller.refresh();
+        .javaScriptProxy({
+          object: new JsBridge(),
+          name: 'xzmuNative',
+          methodList: ['onRoomState'],
+          controller: this.controller
         })
-        .javaScriptOnDocumentEnd([{ script: HOOK_SCRIPT, scriptRules: ['*.17wanxiao.com'] }])
         .onPageEnd((event: OnPageEndEvent) => {
           const url: string = event.url;
           if (url.includes('api/authorize')) {
