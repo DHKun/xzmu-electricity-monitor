@@ -68,6 +68,7 @@ class MainActivity : AppCompatActivity() {
             if (it >= 0) {
                 Prefs.setThreshold(this, it)
                 Toast.makeText(this, "阈值已保存: ${fmt(it)}度", Toast.LENGTH_SHORT).show()
+                AlertEval.reevaluateWithLast(this)
             }
         }
     }
@@ -85,11 +86,11 @@ class MainActivity : AppCompatActivity() {
                         Toast.makeText(this, "登录已过期, 点击\"重新绑定\"重新登录", Toast.LENGTH_LONG).show()
                     }
                     r.ok && r.quantity != null -> {
-                        Prefs.setLastQty(this, r.quantity!!.toFloat())
                         Prefs.setLastCheck(this, System.currentTimeMillis())
                         Prefs.setCookieSnapshot(this, PowerApi.sessionCookie(this))
                         balanceText.text = fmt(r.quantity!!.toFloat())
                         statusText.text = "上次查询: " + fmtTime(System.currentTimeMillis())
+                        AlertEval.evaluate(this, r.quantity!!, r.unit)
                     }
                     else -> statusText.text = "查询失败: ${r.message}"
                 }
