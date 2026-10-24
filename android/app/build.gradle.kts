@@ -1,3 +1,6 @@
+import java.util.Properties
+import java.io.File
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -12,12 +15,33 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.0.0"
+    }
+
+    // 发布签名密钥放在构建机 ~/.keystores/xzmupower.properties(不入库);
+    // 文件不存在时回退 debug 签名, 保证任何人都能本地构建
+    val keystoreProps = Properties().apply {
+        val f = File(System.getProperty("user.home"), ".keystores/xzmupower.properties")
+        if (f.exists()) f.inputStream().use { load(it) }
+    }
+    val hasReleaseKey = keystoreProps.containsKey("storeFile")
+
+    signingConfigs {
+        if (hasReleaseKey) {
+            create("release") {
+                storeFile = File(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = if (hasReleaseKey) signingConfigs.getByName("release")
+                            else signingConfigs.getByName("debug")
         }
     }
     compileOptions {

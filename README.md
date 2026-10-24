@@ -19,18 +19,14 @@
 
 ## 安卓 App
 
-1. 下载/自行构建 `android/` 目录下的工程得到 APK，安装
-2. 打开 App → 在内嵌页面登录（完美校园帐号 或 校园卡认证）
-3. 按提示点进宿舍用电项目、选择自己的房间，看到剩余电量后自动完成绑定
-4. 设置低电量阈值，之后每 6 小时自动查询，低于阈值弹通知
-
-会话过期时 App 会通知"登录已过期"，点开重新登录一次即可（房间无需重选）。
+**直接下载**：[Releases](https://github.com/DHKun/xzmu-electricity-monitor/releases) 里的 `XZMUPower-v1.0.0.apk`，安装后按提示登录选房即可。
 
 自行构建（需 JDK 17+ 与 Android SDK 35）：
 
 ```bash
 cd android && ./gradlew assembleDebug
 # 输出: android/app/build/outputs/apk/debug/app-debug.apk
+# 发布签名: 构建机放 ~/.keystores/xzmupower.properties 后 assembleRelease 自动启用
 ```
 
 ## 工作原理
