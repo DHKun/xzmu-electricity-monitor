@@ -4,6 +4,30 @@ import { webview } from '@kit.ArkWeb';
 import { Prefs } from '../service/Prefs';
 import { PowerApi, queryUrl, RoomState } from '../service/PowerApi';
 
+let nativeHandler: ((url: string) => void) | null = null;
+
+/** 注入网页的桥: H5 的余额查询 XHR 由此上报原生 */
+class JsBridge {
+  onRoomState(url: string): void {
+    const h = nativeHandler;
+    if (h !== null) {
+      h(url);
+    }
+  }
+}
+
+const HOOK_SCRIPT: string = `(function(){
+  if (window.__xzmuHooked) return;
+  window.__xzmuHooked = true;
+  function report(u){ try { if (String(u).indexOf('getRoomState.do') >= 0 && window.xzmuNative) { window.xzmuNative.onRoomState(String(u)); } } catch(e) {} }
+  var origOpen = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function(method, url){ report(url); return origOpen.apply(this, arguments); };
+  if (window.fetch) {
+    var origFetch = window.fetch;
+    window.fetch = function(input, init){ report(typeof input === 'string' ? input : (input && input.url) || ''); return origFetch.apply(this, arguments); };
+  }
+})()`;
+
 @Entry
 @Component
 struct Setup {
@@ -18,7 +42,14 @@ struct Setup {
   private forceLoginTried: boolean = false;
 
   aboutToAppear(): void {
+    nativeHandler = (url: string) => {
+      this.handleIntercept(url);
+    };
     Prefs.init(getContext(this) as common.UIAbilityContext).catch(() => {});
+  }
+
+  aboutToDisappear(): void {
+    nativeHandler = null;
   }
 
   /** 登录页: 把"选择学校"下拉换成可搜索弹层(与安卓版同一脚本) */
@@ -164,16 +195,11 @@ struct Setup {
         .onProgressChange((event: OnProgressChangeEvent) => {
           this.loading = event.newProgress;
         })
-        .onLoadIntercept((event) => {
-          const url: string = event.data.getRequestUrl();
-          this.handleIntercept(url);
-          return false;
+        .onControllerAttached(() => {
+          this.controller.registerJavaScriptProxy(new JsBridge(), 'xzmuNative', ['onRoomState']);
+          this.controller.refresh();
         })
-        .onInterceptRequest((event: OnInterceptRequestEvent): WebResourceResponse => {
-          // XHR 等资源请求只走这里(等价安卓 shouldInterceptRequest), 空响应=放行
-          this.handleIntercept(event.request.getRequestUrl());
-          return new WebResourceResponse();
-        })
+        .javaScriptOnDocumentEnd([{ script: HOOK_SCRIPT, scriptRules: ['*.17wanxiao.com'] }])
         .onPageEnd((event: OnPageEndEvent) => {
           const url: string = event.url;
           if (url.includes('api/authorize')) {
