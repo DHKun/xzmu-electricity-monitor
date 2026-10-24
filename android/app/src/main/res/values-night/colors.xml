@@ -30,4 +30,7 @@
     <color name="m3_surface_container">#1E1F25</color>
     <color name="m3_surface_container_high">#282A2F</color>
     <color name="m3_surface_container_highest">#33343A</color>
+
+    <color name="widget_on_secondary">#B3000000</color>
+    <color name="widget_track">#26000000</color>
 </resources>

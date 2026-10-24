@@ -39,4 +39,11 @@
     <color name="m3_surface_container">#EEEDF4</color>
     <color name="m3_surface_container_high">#E8E7EF</color>
     <color name="m3_surface_container_highest">#E2E2E9</color>
+
+    <!-- 桌面小组件: 与首页主卡同色 -->
+    <color name="widget_bg">@color/m3_primary_container</color>
+    <color name="widget_on">@color/m3_on_primary_container</color>
+    <color name="widget_on_secondary">#CCFFFFFF</color>
+    <color name="widget_track">#33FFFFFF</color>
+    <color name="widget_indicator">@color/m3_primary</color>
 </resources>

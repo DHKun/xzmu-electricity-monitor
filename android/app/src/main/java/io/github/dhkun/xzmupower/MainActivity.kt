@@ -1,6 +1,8 @@
 package io.github.dhkun.xzmupower
 
 import android.Manifest
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
@@ -81,6 +83,7 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<View>(R.id.rowNotify).setOnClickListener { toggleNotify() }
         findViewById<View>(R.id.rowThreshold).setOnClickListener { pickThreshold() }
+        findViewById<View>(R.id.rowWidget).setOnClickListener { pinWidget(it) }
         findViewById<View>(R.id.rowAuto).setOnClickListener {
             Snackbar.make(it, "由系统 WorkManager 调度, 省电模式下可能延后", Snackbar.LENGTH_SHORT).show()
         }
@@ -170,11 +173,22 @@ class MainActivity : AppCompatActivity() {
             .setSingleChoiceItems(values.map { "${PowerStatus.fmtQty(it)} 度" }.toTypedArray(), current) { d, i ->
                 Prefs.setThreshold(this, values[i])
                 AlertEval.reevaluateWithLast(this)
+                PowerWidget.updateAll(this)
                 render()
                 d.dismiss()
             }
             .setNegativeButton("取消", null)
             .show()
+    }
+
+    /** 系统"添加小组件"对话框; 不支持的启动器提示手动添加 */
+    private fun pinWidget(anchor: View) {
+        val mgr = AppWidgetManager.getInstance(this)
+        if (mgr.isRequestPinAppWidgetSupported) {
+            mgr.requestPinAppWidget(ComponentName(this, PowerWidget::class.java), null, null)
+        } else {
+            Snackbar.make(anchor, "请长按桌面空白处 → 小组件, 找到 XZMU电费", Snackbar.LENGTH_LONG).show()
+        }
     }
 
     private fun notificationsOn(): Boolean {

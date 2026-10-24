@@ -9,7 +9,10 @@ class QueryWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx,
 
     override suspend fun doWork(): Result {
         val ctx = applicationContext
-        if (!Prefs.configured(ctx)) return Result.success()
+        if (!Prefs.configured(ctx)) {
+            PowerWidget.updateAll(ctx)
+            return Result.success()
+        }
         // 网络错误等静默, 下个周期再试
         PowerSync.sync(ctx)
         return Result.success()

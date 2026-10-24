@@ -470,6 +470,28 @@
                 </LinearLayout>
 
                 <LinearLayout
+                    android:id="@+id/rowWidget"
+                    style="@style/SettingRow"
+                    android:layout_marginTop="2dp"
+                    android:background="@drawable/bg_group_middle">
+
+                    <ImageView
+                        style="@style/SettingIcon"
+                        android:src="@drawable/ic_widgets" />
+
+                    <LinearLayout style="@style/SettingTexts">
+
+                        <TextView
+                            style="@style/SettingTitle"
+                            android:text="添加桌面小组件" />
+
+                        <TextView
+                            style="@style/SettingSub"
+                            android:text="在桌面查看电量, 可直接刷新" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout
                     android:id="@+id/rowAuto"
                     style="@style/SettingRow"
                     android:layout_marginTop="2dp"

@@ -24,6 +24,7 @@ object PowerSync {
                 Prefs.setSessionDead(ctx, true)
             }
         }
+        PowerWidget.updateAll(ctx)
         return r
     }
 

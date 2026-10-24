@@ -207,6 +207,7 @@ class SetupActivity : AppCompatActivity() {
                     Prefs.saveBinding(this, payProId, roomVerify, r.roomLabel)
                     Prefs.setCookieSnapshot(this, cookie)
                     Prefs.recordReading(this, r.quantity.toFloat())
+                    PowerWidget.updateAll(this)
                     Toast.makeText(this,
                         "绑定成功 · ${r.roomLabel} 剩余 ${r.quantity}${r.unit}", Toast.LENGTH_LONG).show()
                     // 首次绑定没有首页在栈里; 重新绑定时首页 onResume 会自动刷新

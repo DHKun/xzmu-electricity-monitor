@@ -10,7 +10,7 @@
 |---|---|---|---|
 | 适合 | 普通用户，装上就能用 | 鸿蒙 7 手机/平板 | 想跑在服务器/电脑上的进阶用户 |
 | 登录 | App 内嵌页面登录完美校园帐号（一次） | 同安卓 | 需自行抓包获取 Cookie |
-| 告警 | 系统通知 | 系统通知 + 桌面服务卡片 | 桌面弹窗(kdialog) |
+| 告警 | 系统通知 + 桌面小组件 | 系统通知 + 桌面服务卡片 | 桌面弹窗(kdialog) |
 
 数据来自「电网缴费」页面（新开普 · 完美校园云），接口经 mitmproxy 抓包逆向获得。
 
@@ -19,9 +19,10 @@
 
 ## 安卓 App
 
-**直接下载**：[Releases](https://github.com/DHKun/xzmu-electricity-monitor/releases) 里的 `XZMUPower-v1.1.0.apk`，安装后按提示登录选房即可。
+**直接下载**：[Releases](https://github.com/DHKun/xzmu-electricity-monitor/releases) 里的 `XZMUPower-v1.1.1.apk`，安装后按提示登录选房即可。
 
 Material 3 界面：大标题顶栏、电量圆环、预计可用天数与日均用电估算、分组设置列表，深浅色适配。
+桌面小组件：默认 2×2，拉宽到 4×2 自动切换为圆环布局，组件上可直接刷新。
 
 鸿蒙版见 [`harmonyos/README.md`](harmonyos/README.md)，Releases 里提供未签名 HAP。
 
