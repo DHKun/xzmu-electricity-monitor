@@ -4,10 +4,34 @@ import { Prefs } from '../service/Prefs';
 import { PowerApi, queryUrl, RoomState } from '../service/PowerApi';
 import { CardSync } from '../service/PowerSync';
 import { bumpData } from './Actions';
+import { Credentials, CredData } from '../service/Credentials';
 
 const STEPS: string[] = ['登录', '选择项目', '选择房间'];
 
 let nativeHandler: ((url: string) => void) | null = null;
+/** 用户在登录页点登录时抓到的凭据 JSON, 绑定成功且勾选"记住密码"后才落盘 */
+let capturedCredsJson: string = '';
+
+/** 登录页: 点登录时读下输入框里的账号密码, 经 xzmuNative.onCreds 回传 */
+const CAPTURE_SCRIPT: string = `(function(){
+  if (window.__xzmuCap) return; window.__xzmuCap = true;
+  document.addEventListener('click', function(ev){
+    var hit = ev.target && (ev.target.id==='lgn' ||
+              (ev.target.closest && ev.target.closest('#lgn')));
+    if (!hit) return;
+    try {
+      var wx = document.getElementById('wx-login-div');
+      var isWx = wx && getComputedStyle(wx).display !== 'none';
+      var d;
+      if (isWx) { d = {t:'wx', u:val('username'), p:val('password'), cc:'', outid:''}; }
+      else { var s=document.getElementById('customerSelect');
+             d = {t:'ecard', u:val('username_'), p:val('password_'),
+                  cc: s?s.value:'', outid: val('outid')}; }
+      if (d.p && window.xzmuNative) window.xzmuNative.onCreds(JSON.stringify(d));
+    } catch(e){}
+    function val(id){var e=document.getElementById(id); return e?e.value:'';}
+  }, true);
+})()`;
 
 /** 注入网页的桥: H5 的余额查询 XHR 由此上报原生 */
 class JsBridge {
@@ -16,6 +40,10 @@ class JsBridge {
     if (h !== null) {
       h(url);
     }
+  }
+
+  onCreds(json: string): void {
+    capturedCredsJson = json;
   }
 }
 
@@ -64,6 +92,7 @@ export struct SetupPage {
   @State hintText: string = '用完美校园帐号或校园卡认证登录';
   @State loading: number = 0;
   @State verifying: boolean = false;
+  @State rememberCreds: boolean = true;
   private stack: NavPathStack | null = null;
   private controller: webview.WebviewController = new webview.WebviewController();
   private pendingPayProId: string = '';
@@ -208,6 +237,25 @@ export struct SetupPage {
     this.tryFinish();
   }
 
+  /** 勾了"记住密码"且抓到了凭据就存进安全存储; 没勾则清掉之前可能存过的 */
+  saveCredsIfOptedIn(): void {
+    if (this.rememberCreds && capturedCredsJson.length > 0) {
+      try {
+        const o: Record<string, string> = JSON.parse(capturedCredsJson) as Record<string, string>;
+        const c: CredData = new CredData();
+        c.type = o.t !== undefined ? o.t : 'wx';
+        c.username = o.u !== undefined ? o.u : '';
+        c.password = o.p !== undefined ? o.p : '';
+        c.customerCode = o.cc !== undefined ? o.cc : '';
+        c.outid = o.outid !== undefined ? o.outid : '';
+        Credentials.save(c);
+      } catch (e) {
+      }
+    } else if (!this.rememberCreds) {
+      Credentials.clear();
+    }
+  }
+
   tryFinish(): void {
     const payProId: string = this.pendingPayProId;
     const roomVerify: string = this.pendingRoomVerify;
@@ -232,6 +280,7 @@ export struct SetupPage {
           const label: string = r.roomLabel.length > 0 ? r.roomLabel : roomVerify;
           Prefs.saveBinding(payProId, roomVerify, label, cookie, r.quantity).then(() => {
             CardSync.pushAll(false);
+            this.saveCredsIfOptedIn();
             bumpData();
             this.getUIContext().getPromptAction().showToast({
               message: `绑定成功 · ${label} 剩余 ${r.quantity}${r.unit}`
@@ -324,7 +373,7 @@ export struct SetupPage {
             .javaScriptProxy({
               object: new JsBridge(),
               name: 'xzmuNative',
-              methodList: ['onRoomState'],
+              methodList: ['onRoomState', 'onCreds'],
               controller: this.controller
             })
             .onConsole((event: OnConsoleEvent) => {
@@ -343,6 +392,7 @@ export struct SetupPage {
               }
               if (url.includes('api/authorize')) {
                 this.injectSchoolSearch();
+                this.controller.runJavaScript(CAPTURE_SCRIPT).catch(() => {});
                 this.controller.runJavaScript('document.title').then((title: string) => {
                   if (title.includes('提示') && !this.forceLoginTried) {
                     this.forceLoginTried = true;
@@ -373,6 +423,22 @@ export struct SetupPage {
         .layoutWeight(1)
         .borderRadius({ topLeft: 20, topRight: 20 })
         .clip(true)
+
+        Row({ space: 8 }) {
+          Checkbox()
+            .select(this.rememberCreds)
+            .selectedColor($r('app.color.set_blue'))
+            .width(20)
+            .height(20)
+            .onChange((v: boolean) => { this.rememberCreds = v; })
+          Text('记住密码, 会话过期时自动续期(加密存本机)')
+            .fontSize(13)
+            .fontColor($r('sys.color.font_secondary'))
+            .layoutWeight(1)
+        }
+        .width('100%')
+        .padding({ left: 18, right: 16, top: 4 })
+        .onClick(() => { this.rememberCreds = !this.rememberCreds; })
 
         Row() {
           Button({ type: ButtonType.Capsule }) {

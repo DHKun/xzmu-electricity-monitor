@@ -45,6 +45,9 @@ class MainActivity : AppCompatActivity() {
     /** 本页创建时是否用了壁纸取色; 设置里切换后回到首页需要重建 */
     private var appliedDynamic = false
     private var shownQty = -1f
+    private var autoReloginActive = false
+    /** 承载隐藏的自动登录 WebView */
+    private val content: ViewGroup by lazy { findViewById(android.R.id.content) }
 
     private val notifyPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
@@ -56,6 +59,9 @@ class MainActivity : AppCompatActivity() {
         // 调试构建: adb shell am start -n <包名>/.MainActivity --ez xzmu.demo true 写入示例数据
         if (BuildConfig.DEBUG && intent.getBooleanExtra("xzmu.demo", false)) {
             Prefs.seedDemo(this)
+        }
+        if (BuildConfig.DEBUG && intent.getBooleanExtra("xzmu.democreds", false)) {
+            Credentials.save(this, Credentials.TYPE_WX, "demo_user", "demo_pass", "", "")
         }
         if (!Prefs.configured(this)) {
             startActivity(Intent(this, SetupActivity::class.java))
@@ -106,7 +112,10 @@ class MainActivity : AppCompatActivity() {
             return
         }
         render()
-        if (System.currentTimeMillis() - Prefs.lastCheck(this) > 60_000) {
+        if (Prefs.sessionDead(this) && Credentials.has(this)) {
+            // 已知会话过期且存了凭据: 直接静默续期, 不必先失败一次
+            autoRelogin()
+        } else if (System.currentTimeMillis() - Prefs.lastCheck(this) > 60_000) {
             swipe.isRefreshing = true
             query()
         }
@@ -144,7 +153,7 @@ class MainActivity : AppCompatActivity() {
         tile(id).findViewById<TextView>(R.id.tileDesc).text = desc
     }
 
-    private fun query() {
+    private fun query(allowRelogin: Boolean = true) {
         if (querying) return
         querying = true
         render()
@@ -153,6 +162,11 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 querying = false
                 swipe.isRefreshing = false
+                // 会话过期且存了凭据: 先静默续期再查一次, 用户无感
+                if (r.sessionDead && allowRelogin && Credentials.has(this)) {
+                    autoRelogin()
+                    return@runOnUiThread
+                }
                 errorText = when {
                     r.sessionDead -> "登录已过期, 重新登录后即可恢复查询"
                     !r.ok -> "查询失败: ${r.message}"
@@ -166,12 +180,35 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** 用保存的凭据在隐藏 WebView 里自动登录, 成功后再查一次 */
+    private fun autoRelogin() {
+        if (autoReloginActive) return
+        autoReloginActive = true
+        errorText = null
+        render()
+        SilentLogin(this, content).start { ok ->
+            autoReloginActive = false
+            if (ok) {
+                query(allowRelogin = false)
+            } else {
+                errorText = "自动登录失败, 请手动重新登录"
+                render()
+            }
+        }
+    }
+
     private fun render() {
         val v = PowerStatus.load(this)
         findViewById<TextView>(R.id.roomText).text = v.room.ifBlank { "我的宿舍" }
         renderHero(v)
 
-        val banner = errorText ?: if (v.sessionDead) "登录已过期, 重新登录后即可恢复查询" else null
+        // 自动续期进行中不弹"登录已过期", 以免吓人; 用顶部"正在自动登录…"表示进度
+        val banner = when {
+            autoReloginActive -> null
+            errorText != null -> errorText
+            v.sessionDead -> "登录已过期, 重新登录后即可恢复查询"
+            else -> null
+        }
         findViewById<MaterialCardView>(R.id.banner).visibility = if (banner != null) View.VISIBLE else View.GONE
         findViewById<TextView>(R.id.bannerText).text = banner
 
@@ -216,7 +253,11 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.unitText).setTextColor(fgSoft)
         findViewById<TextView>(R.id.timeText).apply {
             setTextColor(fgSoft)
-            text = if (querying) "正在查询…" else PowerStatus.fmtTime(v.lastAt)
+            text = when {
+                autoReloginActive -> "正在自动登录…"
+                querying -> "正在查询…"
+                else -> PowerStatus.fmtTime(v.lastAt)
+            }
         }
         findViewById<TextView>(R.id.summaryText).apply {
             setTextColor(fg)

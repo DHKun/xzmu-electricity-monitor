@@ -6,3 +6,4 @@ oh_modules/
 */.hvigor/
 local.properties
 **/.preview/
+.idea/

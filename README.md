@@ -9,7 +9,7 @@
 | | 安卓 App（`android/`） | 鸿蒙 App（`harmonyos/`） | 桌面脚本（`monitor.py`） |
 |---|---|---|---|
 | 适合 | 普通用户，装上就能用 | 鸿蒙 7 手机/平板 | 想跑在服务器/电脑上的进阶用户 |
-| 登录 | App 内嵌页面登录完美校园帐号（一次） | 同安卓 | 需自行抓包获取 Cookie |
+| 登录 | 登录完美校园帐号，可记住密码、会话过期自动续期 | 同安卓 | 需自行抓包获取 Cookie |
 | 告警 | 系统通知 + 桌面小组件 | 系统通知 + 桌面服务卡片 | 桌面弹窗(kdialog) |
 
 数据来自「电网缴费」页面（新开普 · 完美校园云），接口经 mitmproxy 抓包逆向获得。
@@ -19,11 +19,12 @@
 
 ## 安卓 App
 
-**直接下载**：[Releases](https://github.com/DHKun/xzmu-electricity-monitor/releases) 里的 `MinDaPower-v1.3.0.apk`，安装后按提示登录选房即可。
+**直接下载**：[Releases](https://github.com/DHKun/xzmu-electricity-monitor/releases) 里的 `MinDaPower-v1.4.0.apk`，安装后按提示登录选房即可。
 
 Material 3 界面（参照 Pixel 天气 / 设置）：主卡颜色随电量变化，近 7 天用电柱状图，余量 / 日均用电 / 预计用完 / 提醒阈值信息卡；
 设置单独成页，可选跟随壁纸取色（Material You）；平板横屏两栏、竖屏信息卡一行四张；深浅色适配。
 桌面小组件：默认 2×2，拉宽到 4×2 自动切换为圆环布局，组件上可直接刷新。
+会话自动续期：绑定时勾选「记住密码」，密码经系统密钥库加密存本机，会话过期时在后台静默重登，无需手动。
 
 鸿蒙版见 [`harmonyos/README.md`](harmonyos/README.md)，Releases 里提供未签名 HAP。
 

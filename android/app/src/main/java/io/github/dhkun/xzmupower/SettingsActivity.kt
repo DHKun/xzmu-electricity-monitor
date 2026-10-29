@@ -65,6 +65,22 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<View>(R.id.rowRebind).setOnClickListener {
             startActivity(Intent(this, SetupActivity::class.java).putExtra(SetupActivity.EXTRA_REBIND, true))
         }
+        findViewById<View>(R.id.rowAutoLogin).setOnClickListener {
+            if (Credentials.has(this)) {
+                com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                    .setTitle("关闭自动续期")
+                    .setMessage("将删除本机保存的登录密码, 之后会话过期需手动重新登录。")
+                    .setPositiveButton("关闭并删除") { _, _ ->
+                        Credentials.clear(this)
+                        render()
+                    }
+                    .setNegativeButton("取消", null)
+                    .show()
+            } else {
+                com.google.android.material.snackbar.Snackbar.make(it,
+                    "在重新绑定宿舍时勾选\"记住密码\"即可开启", com.google.android.material.snackbar.Snackbar.LENGTH_LONG).show()
+            }
+        }
         findViewById<TextView>(R.id.versionSub).text = BuildConfig.VERSION_NAME
     }
 
@@ -88,5 +104,10 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.dynamicSub).text =
             if (dynamicOk) "使用壁纸生成的 Material You 配色" else "需要 Android 12 及以上"
         findViewById<TextView>(R.id.roomSub).text = Prefs.roomLabel(this).ifBlank { "未绑定" }
+
+        val hasCreds = Credentials.has(this)
+        findViewById<com.google.android.material.materialswitch.MaterialSwitch>(R.id.autoLoginSwitch).isChecked = hasCreds
+        findViewById<TextView>(R.id.autoLoginSub).text =
+            if (hasCreds) "会话过期时用本机密码自动登录" else "未开启, 过期需手动重新登录"
     }
 }

@@ -80,12 +80,23 @@
         android:layout_height="0dp"
         android:layout_weight="1" />
 
+    <com.google.android.material.checkbox.MaterialCheckBox
+        android:id="@+id/rememberCheck"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="16dp"
+        android:checked="true"
+        android:text="记住密码, 会话过期时自动续期(加密存本机)"
+        android:textAppearance="?attr/textAppearanceBodyMedium" />
+
     <com.google.android.material.button.MaterialButton
         android:id="@+id/doneBtn"
         android:layout_width="match_parent"
         android:layout_height="56dp"
         android:layout_marginStart="16dp"
-        android:layout_marginTop="12dp"
+        android:layout_marginTop="4dp"
         android:layout_marginEnd="16dp"
         android:layout_marginBottom="12dp"
         android:text="已看到剩余电量, 完成绑定"

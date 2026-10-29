@@ -2,6 +2,7 @@ import { notificationManager } from '@kit.NotificationKit';
 import BuildProfile from 'BuildProfile';
 import { Prefs } from '../service/Prefs';
 import { PowerStatus } from '../service/PowerStatus';
+import { Credentials } from '../service/Credentials';
 import { addCard, DATA_VERSION, pickThreshold, requestNotify } from './Actions';
 
 /** 设置页: 仿系统「设置」的分组圆角列表与彩色圆形图标, 平板上居中限宽 */
@@ -11,6 +12,7 @@ export struct SettingsPage {
   @State notifyOn: boolean = false;
   @State threshold: number = 20;
   @State room: string = '';
+  @State autoLoginOn: boolean = false;
   private stack: NavPathStack | null = null;
 
   aboutToAppear(): void {
@@ -21,6 +23,7 @@ export struct SettingsPage {
     Prefs.reload();
     this.threshold = Prefs.getThreshold();
     this.room = Prefs.getRoomLabel();
+    this.autoLoginOn = Credentials.has();
     this.checkNotify();
   }
 
@@ -28,6 +31,24 @@ export struct SettingsPage {
     notificationManager.isNotificationEnabled().then((on: boolean) => {
       this.notifyOn = on;
     }).catch(() => {});
+  }
+
+  /** 已开启则确认后关闭并删除保存的密码; 未开启则提示去绑定页勾选 */
+  toggleAutoLogin(): void {
+    if (!Credentials.has()) {
+      this.getUIContext().getPromptAction().showToast({ message: '在重新绑定宿舍时勾选"记住密码"即可开启' });
+      return;
+    }
+    this.getUIContext().showAlertDialog({
+      title: '关闭自动续期',
+      message: '将删除本机保存的登录密码, 之后会话过期需手动重新登录。',
+      primaryButton: { value: '取消', action: () => {} },
+      secondaryButton: {
+        value: '关闭并删除',
+        fontColor: $r('app.color.set_red'),
+        action: () => { Credentials.clear(); this.autoLoginOn = false; }
+      }
+    });
   }
 
   @Builder
@@ -154,6 +175,16 @@ export struct SettingsPage {
                 this.stack.pushPath(new NavPathInfo('setup', ''));
               }
             })
+          }
+          .width('100%')
+          .padding(4)
+          .borderRadius(20)
+          .backgroundColor($r('sys.color.comp_background_list_card'))
+
+          this.groupTitle('账号')
+          Column() {
+            this.row($r('sys.symbol.arrow_clockwise'), $r('app.color.set_green'), '会话自动续期',
+              this.autoLoginOn ? '已开启' : '未开启', true, () => this.toggleAutoLogin())
           }
           .width('100%')
           .padding(4)

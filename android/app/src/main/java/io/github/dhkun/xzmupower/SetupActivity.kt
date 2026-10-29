@@ -7,11 +7,14 @@ import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.webkit.CookieManager
+import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.CheckBox
 import android.widget.TextView
 import android.widget.Toast
+import org.json.JSONObject
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
@@ -47,6 +50,8 @@ class SetupActivity : AppCompatActivity() {
     private var lastAttemptKey: String? = null
     private var lastAttemptAt = 0L
     private var forceLoginTried = false
+    /** 用户在登录页输入的凭据(点登录时抓到), 绑定成功且勾选"记住密码"后才落盘 */
+    private var capturedCreds: String? = null
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -82,6 +87,8 @@ class SetupActivity : AppCompatActivity() {
             domStorageEnabled = true
             userAgentString = PowerApi.UA
         }
+        // 只暴露一个凭据回传方法给 17wanxiao 登录页, 供"记住密码·自动续期"
+        webView.addJavascriptInterface(CredBridge(), "xzmuCap")
         webView.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(
                 view: WebView, request: WebResourceRequest
@@ -93,6 +100,7 @@ class SetupActivity : AppCompatActivity() {
                 updateHint(url)
                 if (url.contains("api/authorize")) {
                     injectSchoolSearch(view)
+                    captureCreds(view)
                     // "提示"页 = 会话失效错误页, 自动降级到强制登录
                     view.evaluateJavascript("document.title") { title ->
                         if (title?.contains("提示") == true && !forceLoginTried) {
@@ -129,6 +137,36 @@ class SetupActivity : AppCompatActivity() {
             view.postDelayed({ view.evaluateJavascript(js, null) }, 1200)
             view.postDelayed({ view.evaluateJavascript(js, null) }, 3000)
         } catch (_: Exception) { }
+    }
+
+    /** 登录页: 用户点登录按钮时, 读下当时输入框里的账号密码, 存在内存里备用 */
+    private fun captureCreds(view: WebView) {
+        view.evaluateJavascript("""
+            (function(){
+              if (window.__xzmuCap) return; window.__xzmuCap = true;
+              document.addEventListener('click', function(ev){
+                var hit = ev.target && (ev.target.id==='lgn' ||
+                          (ev.target.closest && ev.target.closest('#lgn')));
+                if (!hit) return;
+                try {
+                  var wx = document.getElementById('wx-login-div');
+                  var isWx = wx && getComputedStyle(wx).display !== 'none';
+                  var d;
+                  if (isWx) { d = {t:'wx', u:val('username'), p:val('password'), cc:'', outid:''}; }
+                  else { var s=document.getElementById('customerSelect');
+                         d = {t:'ecard', u:val('username_'), p:val('password_'),
+                              cc: s?s.value:'', outid: val('outid')}; }
+                  if (d.p) xzmuCap.onCreds(JSON.stringify(d));
+                } catch(e){}
+                function val(id){var e=document.getElementById(id); return e?e.value:'';}
+              }, true);
+            })();
+        """, null)
+    }
+
+    private inner class CredBridge {
+        @JavascriptInterface
+        fun onCreds(json: String) { capturedCreds = json }
     }
 
     /** 从拦截到的请求里找 getRoomState.do, 提取绑定参数。
@@ -217,6 +255,7 @@ class SetupActivity : AppCompatActivity() {
                     Prefs.saveBinding(this, payProId, roomVerify, r.roomLabel)
                     Prefs.setCookieSnapshot(this, cookie)
                     Prefs.recordReading(this, r.quantity.toFloat())
+                    saveCredsIfOptedIn()
                     PowerWidget.updateAll(this)
                     Toast.makeText(this,
                         "绑定成功 · ${r.roomLabel} 剩余 ${r.quantity}${r.unit}", Toast.LENGTH_LONG).show()
@@ -236,6 +275,21 @@ class SetupActivity : AppCompatActivity() {
         }
     }
 
+
+    /** 勾了"记住密码"且抓到了凭据就加密落盘; 没勾则清掉之前可能存过的 */
+    private fun saveCredsIfOptedIn() {
+        val remember = findViewById<CheckBox>(R.id.rememberCheck).isChecked
+        val creds = capturedCreds
+        if (remember && creds != null) {
+            try {
+                val o = JSONObject(creds)
+                Credentials.save(this, o.optString("t", Credentials.TYPE_WX),
+                    o.optString("u"), o.optString("p"), o.optString("cc"), o.optString("outid"))
+            } catch (_: Exception) { }
+        } else if (!remember) {
+            Credentials.clear(this)
+        }
+    }
 
     override fun onDestroy() {
         webView.destroy()

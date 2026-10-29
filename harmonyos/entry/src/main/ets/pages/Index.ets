@@ -7,6 +7,8 @@ import { PowerSync } from '../service/PowerSync';
 import { DayUse, PowerLevel, PowerStatus, PowerView } from '../service/PowerStatus';
 import { DATA_VERSION, pickThreshold, requestNotify } from './Actions';
 import { setStatusBarLight } from './SystemBar';
+import { Credentials, CredData } from '../service/Credentials';
+import { SilentWeb } from './SilentWeb';
 import { SetupPage } from './Setup';
 import { SettingsPage } from './Settings';
 
@@ -21,6 +23,9 @@ struct Index {
   @State querying: boolean = false;
   @State statusText: string = '';
   @State bp: string = 'sm';
+  @State reloginActive: boolean = false;
+  private reloginCreds: CredData = new CredData();
+  private reloginTried: boolean = false;
   private notifyOn: boolean = true;
   private scroller: Scroller = new Scroller();
 
@@ -43,7 +48,9 @@ struct Index {
     notificationManager.isNotificationEnabled().then((on: boolean) => {
       this.notifyOn = on;
     }).catch(() => {});
-    if (this.view.configured && Date.now() - this.view.lastAt > 60 * 1000) {
+    if (this.view.configured && this.view.sessionDead && Credentials.has()) {
+      this.autoRelogin();
+    } else if (this.view.configured && Date.now() - this.view.lastAt > 60 * 1000) {
       this.query();
     }
   }
@@ -76,6 +83,12 @@ struct Index {
       // WebView 内核未就绪时拿不到实时会话, 用快照
     }
     PowerSync.syncNow(live).then((r: RoomState) => {
+      // 会话过期且存了凭据: 先静默续期再查一次, 用户无感
+      if (r.sessionDead && !this.reloginTried && Credentials.has()) {
+        this.finishQuery();
+        this.autoRelogin();
+        return;
+      }
       if (!r.ok && !r.sessionDead) {
         this.statusText = `查询失败: ${r.message}`;
       }
@@ -90,6 +103,32 @@ struct Index {
     this.querying = false;
     this.refreshing = false;
     this.reload();
+  }
+
+  /** 用保存的凭据在隐藏 Web 里自动登录, 成功后再查一次 */
+  autoRelogin(): void {
+    if (this.reloginActive) {
+      return;
+    }
+    const c: CredData | null = Credentials.load();
+    if (c === null) {
+      this.statusText = '自动登录失败, 请手动重新登录';
+      return;
+    }
+    this.reloginTried = true;
+    this.reloginCreds = c;
+    this.statusText = '';
+    this.reloginActive = true;
+  }
+
+  onReloginResult(ok: boolean): void {
+    this.reloginActive = false;
+    if (ok) {
+      this.query();
+    } else {
+      this.statusText = '自动登录失败, 请手动重新登录';
+      this.reload();
+    }
   }
 
   push(name: string): void {
@@ -219,7 +258,7 @@ struct Index {
       Text(this.headline())
         .fontSize(20)
         .fontColor($r('app.color.on_sky'))
-      Text(this.querying ? '正在查询…' : PowerStatus.fmtTime(this.view.lastAt))
+      Text(this.reloginActive ? '正在自动登录…' : (this.querying ? '正在查询…' : PowerStatus.fmtTime(this.view.lastAt)))
         .fontSize(14)
         .fontColor($r('app.color.on_sky_secondary'))
         .margin({ top: 6 })
@@ -399,7 +438,7 @@ struct Index {
   @Builder
   cards() {
     Column({ space: 12 }) {
-      if (this.statusText.length > 0 || this.view.sessionDead) {
+      if (!this.reloginActive && (this.statusText.length > 0 || this.view.sessionDead)) {
         this.banner()
       }
       this.weekCard()
@@ -445,6 +484,11 @@ struct Index {
   build() {
     Navigation(this.pathStack) {
       Stack({ alignContent: Alignment.Top }) {
+        // 续期时才构建的隐藏登录 Web(1×1 透明)
+        if (this.reloginActive) {
+          SilentWeb({ creds: this.reloginCreds, onResult: (ok: boolean) => this.onReloginResult(ok) })
+        }
+
         // 天空渐变铺满整屏, 包括状态栏和导航条区域
         Column()
           .width('100%')

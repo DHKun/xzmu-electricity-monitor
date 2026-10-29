@@ -2,6 +2,7 @@ import { AbilityConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { Prefs } from '../service/Prefs';
+import { Credentials, CredData } from '../service/Credentials';
 import { workScheduler } from '@kit.BackgroundTasksKit';
 import { webview } from '@kit.ArkWeb';
 import BuildProfile from 'BuildProfile';
@@ -16,6 +17,13 @@ export default class EntryAbility extends UIAbility {
     // 调试构建: aa start ... --pb xzmu.demo true 写入示例数据
     if (BuildProfile.DEBUG && want.parameters !== undefined && want.parameters['xzmu.demo'] === true) {
       Prefs.seedDemo().catch(() => {});
+    }
+    if (BuildProfile.DEBUG && want.parameters !== undefined && want.parameters['xzmu.democreds'] === true) {
+      const c: CredData = new CredData();
+      c.type = 'wx';
+      c.username = 'demo_user';
+      c.password = 'demo_pass';
+      Credentials.save(c);
     }
     // 首页要从 WebCookieManager 取实时会话, 内核须先初始化
     try {

@@ -231,6 +231,38 @@
 
             <TextView
                 style="@style/SettingHeader"
+                android:text="账号" />
+
+            <LinearLayout
+                android:id="@+id/rowAutoLogin"
+                style="@style/SettingRow"
+                android:background="@drawable/bg_group_single">
+
+                <ImageView
+                    style="@style/SettingIcon"
+                    android:src="@drawable/ic_autorenew" />
+
+                <LinearLayout style="@style/SettingTexts">
+
+                    <TextView
+                        style="@style/SettingTitle"
+                        android:text="会话自动续期" />
+
+                    <TextView
+                        android:id="@+id/autoLoginSub"
+                        style="@style/SettingSub" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/autoLoginSwitch"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:clickable="false"
+                    android:focusable="false" />
+            </LinearLayout>
+
+            <TextView
+                style="@style/SettingHeader"
                 android:text="关于" />
 
             <LinearLayout
