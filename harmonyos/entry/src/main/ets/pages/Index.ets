@@ -89,7 +89,10 @@ struct Index {
         this.autoRelogin();
         return;
       }
-      if (!r.ok && !r.sessionDead) {
+      if (r.ok) {
+        // 查询成功后解锁续期开关, 下次过期再触发
+        this.reloginTried = false;
+      } else if (!r.sessionDead) {
         this.statusText = `查询失败: ${r.message}`;
       }
       this.finishQuery();
