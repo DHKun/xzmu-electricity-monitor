@@ -1,14 +1,11 @@
 package io.github.dhkun.xzmupower
 
-import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import androidx.core.app.NotificationCompat
-import androidx.core.content.ContextCompat
 
 object AlertNotify {
     const val CHANNEL_ALERT = "balance_alert"
@@ -27,9 +24,6 @@ object AlertNotify {
                 .apply { description = "查询失败、需要重新登录等状态" })
     }
 
-    private fun canNotify(ctx: Context) =
-        ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) ==
-                PackageManager.PERMISSION_GRANTED
 
     private fun pi(ctx: Context, intent: Intent) = PendingIntent.getActivity(
         ctx, intent.hashCode(), intent,
@@ -37,7 +31,7 @@ object AlertNotify {
 
     private fun post(ctx: Context, id: Int, channel: String, title: String, body: String, intent: Intent): Boolean {
         ensureChannels(ctx)
-        if (!canNotify(ctx)) return false
+        if (!Actions.notificationsOn(ctx)) return false
         val n = NotificationCompat.Builder(ctx, channel)
             .setSmallIcon(R.drawable.ic_stat)
             .setContentTitle(title)
@@ -50,10 +44,9 @@ object AlertNotify {
         return true
     }
 
-    /** 低电量告警 */
-    fun alert(ctx: Context, title: String, body: String) {
+    /** 低电量告警; 返回是否已交给系统发布 */
+    fun alert(ctx: Context, title: String, body: String): Boolean =
         post(ctx, ID_ALERT, CHANNEL_ALERT, title, body, Intent(ctx, MainActivity::class.java))
-    }
 
     /** 状态提醒 */
     fun info(ctx: Context, title: String, body: String) {

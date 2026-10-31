@@ -81,6 +81,8 @@ object Credentials {
             .putString("type", type)
             .putString("username", encrypt(username))
             .putString("password", encrypt(password))
+            .putString("customerCode", customerCode)
+            .putString("outid", encrypt(outid))
             .putBoolean("enabled", true)
             .apply()
         Prefs.bumpSessionGen(ctx)

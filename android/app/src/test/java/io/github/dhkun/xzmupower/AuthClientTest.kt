@@ -38,6 +38,13 @@ class CookieJarTest {
         assertEquals("", jar.header(open, 0))
     }
 
+    @Test fun rotatedSessionReplacesImportedWebViewCookie() {
+        val jar = CookieJar()
+        jar.importPlain(PowerApi.HOST, "/CloudPayment/", "SESSION=fromWebView; other=1")
+        jar.store(PowerApi.SESSION_URL, listOf("SESSION=rotated; Path=/CloudPayment/; Secure; HttpOnly"), 0)
+        assertEquals("other=1; SESSION=rotated", jar.header(pay, 0))
+    }
+
     @Test fun serializationRoundTrips() {
         val jar = CookieJar()
         jar.store(open, listOf("SESSION=sso; Path=/", "wide=1; Domain=.17wanxiao.com; Path=/; Max-Age=100"), 0)
@@ -79,6 +86,22 @@ class AuthClientTest {
     private val deadline get() = Deadline({ 0L }, 90_000)
     private val noRedirectSession = HttpResponse(200, "<html>缴费</html>", listOf("SESSION=fresh; Path=/CloudPayment/"))
     private val toPay = HttpResponse(302, "", location = "https://${PowerApi.HOST}:18443/CloudPayment/user/pay.do?code=abc")
+
+    @Test fun everyAuthRequestAcceptsAnyRepresentation() {
+        val http = FakeHttp()
+            .on("api/authorize", HttpResponse(200, LOGIN_PAGE))
+            .on("api/login", HttpResponse(200, """{"errorCode":1}"""))
+        AuthClient(http) { 0L }.recover(CookieJar(), FakeStore.WX_CREDS, deadline)
+        assertEquals(2, http.requests.size)
+        http.requests.forEach { assertTrue(it.url, "*/*" in it.headers.getValue("Accept")) }
+    }
+
+    @Test fun rejectedAcceptHeaderIsReportedWithStatus() {
+        val http = FakeHttp().on("api/authorize", HttpResponse(406, "{}"))
+        val r = AuthClient(http) { 0L }.recover(CookieJar(), null, deadline)
+        assertEquals(AuthClient.Status.UNKNOWN, r.status)
+        assertTrue(r.message, "406" in r.message)
+    }
 
     @Test fun ssoRedirectRecoversWithoutSendingPassword() {
         val http = FakeHttp().on("api/authorize", toPay).on("pay.do", noRedirectSession)

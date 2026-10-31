@@ -121,7 +121,10 @@ object Prefs {
         val time = SimpleDateFormat("MM-dd HH:mm:ss", Locale.CHINA).format(Date(startedAt))
         val ms = System.currentTimeMillis() - startedAt
         val note = if (notifyBlocked) " 通知受限" else ""
-        val lines = runLog(ctx) + "$time ${trigger.name} ${r.stage.name} ${r.outcome.name} ${ms}ms$note"
+        // 认证阶段的失败原因是固定文案; 查询阶段的 message 可能带响应原文, 不记录
+        val failed = r.stage != Stage.QUERY && (r.outcome == Outcome.UNKNOWN || r.outcome == Outcome.TRANSIENT)
+        val why = if (failed) " ${r.message.take(60)}" else ""
+        val lines = runLog(ctx) + "$time ${trigger.name} ${r.stage.name} ${r.outcome.name} ${ms}ms$why$note"
         sp(ctx).edit().putString("runLog", lines.takeLast(MAX_RUNS).joinToString("\n")).apply()
     }
 

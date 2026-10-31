@@ -19,14 +19,16 @@ object PowerSync {
         val startedAt = System.currentTimeMillis()
         try {
             val r = SyncEngine(PrefsSyncStore(ctx), UrlTransport).run(trigger, cancelled, onRecovering)
+            var lowAlertBlocked = false
             if (r.outcome == Outcome.OK && r.quantity != null) {
-                AlertEval.evaluate(ctx, r.quantity, r.unit)
+                lowAlertBlocked = AlertEval.evaluate(ctx, r.quantity, r.unit)
                 AlertNotify.cancelLogin(ctx)
             }
-            val alertPending = Prefs.needsLogin(ctx) && !Prefs.manualAlerted(ctx)
-            val delivered = alertPending && AlertNotify.login(ctx)
-            if (delivered) Prefs.setManualAlerted(ctx, true)
-            Prefs.appendRun(ctx, startedAt, trigger, r, notifyBlocked = alertPending && !delivered)
+            val loginPending = Prefs.needsLogin(ctx) && !Prefs.manualAlerted(ctx)
+            val loginPosted = loginPending && AlertNotify.login(ctx)
+            if (loginPosted) Prefs.setManualAlerted(ctx, true)
+            Prefs.appendRun(ctx, startedAt, trigger, r,
+                notifyBlocked = lowAlertBlocked || (loginPending && !loginPosted))
             PowerWidget.updateAll(ctx)
             return r
         } finally {
@@ -60,9 +62,14 @@ object WebSession {
         return jar
     }
 
-    /** 用户刚完成交互登录: 换入 WebView 里的新会话, 进行中的旧同步结果随之作废 */
-    fun adoptInteractiveLogin(ctx: Context) {
-        Prefs.replaceSession(ctx, readWebCookies().serialize())
+    /**
+     * 用户刚完成交互登录: 换入 WebView 里的新会话, 进行中的旧同步结果随之作废。
+     * 验证查询可能已轮换会话, 它的响应 Cookie 要盖在 WebView 读到的值上。
+     */
+    fun adoptInteractiveLogin(ctx: Context, setCookies: List<String> = emptyList()) {
+        val jar = readWebCookies()
+        jar.store(PowerApi.SESSION_URL, setCookies, System.currentTimeMillis())
+        Prefs.replaceSession(ctx, jar.serialize())
     }
 
     /** 升级自旧版: 从 WebView 与 Cookie 快照建立持久存储, 只做一次 */

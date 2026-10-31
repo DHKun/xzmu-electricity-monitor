@@ -252,7 +252,7 @@ class SetupActivity : AppCompatActivity() {
                 doneBtn.text = "已看到剩余电量, 完成绑定"
                 if (r.ok && r.quantity != null) {
                     Prefs.saveBinding(this, payProId, roomVerify, r.roomLabel)
-                    WebSession.adoptInteractiveLogin(this)
+                    WebSession.adoptInteractiveLogin(this, r.setCookies)
                     AlertNotify.cancelLogin(this)
                     Prefs.recordReading(this, r.quantity.toFloat())
                     saveCredsIfOptedIn()

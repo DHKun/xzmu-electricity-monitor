@@ -37,7 +37,7 @@ class AuthClient(private val http: HttpTransport, private val now: () -> Long) {
         data class LoginForm(val url: String) : Landing
         data object ErrorPage : Landing
         data class Temporary(val status: Int) : Landing
-        data object Unrecognized : Landing
+        data class Unrecognized(val detail: String) : Landing
     }
 
     fun recover(jar: CookieJar, creds: LoginCreds?, deadline: Deadline): Result = try {
@@ -50,7 +50,8 @@ class AuthClient(private val http: HttpTransport, private val now: () -> Long) {
             is Landing.LoginForm ->
                 if (creds == null) Result(Status.NO_CREDENTIALS) else login(landing.url, jar, creds, deadline)
             is Landing.Temporary -> Result(Status.TRANSIENT, "授权服务暂时不可用(${landing.status})")
-            else -> Result(Status.UNKNOWN, "授权页面无法识别")
+            is Landing.Unrecognized -> Result(Status.UNKNOWN, "授权页面无法识别(${landing.detail})")
+            is Landing.ErrorPage -> Result(Status.UNKNOWN, "授权页面无法识别(错误页)")
         }
     } catch (e: IOException) {
         Result(Status.TRANSIENT, "网络错误: ${e.message}")
@@ -61,7 +62,7 @@ class AuthClient(private val http: HttpTransport, private val now: () -> Long) {
         val response = http.send(HttpRequest(url, mapOf(
             "Cookie" to jar.header(url, now()),
             "User-Agent" to PowerApi.UA,
-            "Accept" to "application/json",
+            "Accept" to ACCEPT_JSON,
             "Referer" to formUrl,
             "X-Requested-With" to "XMLHttpRequest",
         ), deadline.nextTimeoutMs(), formBody(creds)))
@@ -81,6 +82,7 @@ class AuthClient(private val http: HttpTransport, private val now: () -> Long) {
         return when (val landing = walk(PowerApi.POST_LOGIN_AUTHORIZE_URL, jar, deadline)) {
             is Landing.Session -> Result(Status.READY)
             is Landing.Temporary -> Result(Status.TRANSIENT, "授权服务暂时不可用(${landing.status})")
+            is Landing.Unrecognized -> Result(Status.UNKNOWN, "登录后未回到缴费页面(${landing.detail})")
             else -> Result(Status.UNKNOWN, "登录后未回到缴费页面")
         }
     }
@@ -103,30 +105,33 @@ class AuthClient(private val http: HttpTransport, private val now: () -> Long) {
     private fun walk(start: String, jar: CookieJar, deadline: Deadline): Landing {
         var url = start
         repeat(MAX_HOPS) {
-            if (!allowed(url)) return if (jar.has(PowerApi.HOST, "SESSION")) Landing.Session else Landing.Unrecognized
+            if (!allowed(url)) {
+                return if (jar.has(PowerApi.HOST, "SESSION")) Landing.Session else Landing.Unrecognized("跳转到未知地址")
+            }
             val r = http.send(HttpRequest(url, mapOf(
                 "Cookie" to jar.header(url, now()),
                 "User-Agent" to PowerApi.UA,
-                "Accept" to "text/html,application/xhtml+xml",
+                "Accept" to ACCEPT_HTML,
             ), deadline.nextTimeoutMs()))
             jar.store(url, r.setCookies, now())
             if (r.status in 300..399) {
-                val location = r.location ?: return Landing.Unrecognized
-                url = resolve(url, location) ?: return Landing.Unrecognized
+                val target = r.location?.let { resolve(url, it) } ?: return Landing.Unrecognized("跳转地址无效")
+                url = target
                 return@repeat
             }
             if (r.status == 429 || r.status >= 500) return Landing.Temporary(r.status)
             if (URI(url).host == PowerApi.HOST) {
-                return if (r.status < 400 && jar.has(PowerApi.HOST, "SESSION")) Landing.Session else Landing.Unrecognized
+                return if (r.status < 400 && jar.has(PowerApi.HOST, "SESSION")) Landing.Session
+                else Landing.Unrecognized("HTTP ${r.status}")
             }
             return when {
-                r.status >= 400 -> Landing.Unrecognized
+                r.status >= 400 -> Landing.Unrecognized("HTTP ${r.status}")
                 LOGIN_MARKER in r.body -> Landing.LoginForm(url)
                 ERROR_TITLE.containsMatchIn(r.body) -> Landing.ErrorPage
-                else -> Landing.Unrecognized
+                else -> Landing.Unrecognized("页面没有登录表单")
             }
         }
-        return Landing.Unrecognized
+        return Landing.Unrecognized("跳转次数过多")
     }
 
     private fun allowed(url: String): Boolean {
@@ -140,6 +145,9 @@ class AuthClient(private val http: HttpTransport, private val now: () -> Long) {
     companion object {
         private const val MAX_HOPS = 8
         private const val LOGIN_MARKER = "id=\"lgn\""
+        // 服务器对没有 */* 兜底的 Accept 返回 406, 必须与浏览器和登录页脚本一致
+        private const val ACCEPT_HTML = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        private const val ACCEPT_JSON = "application/json, text/javascript, */*; q=0.01"
         private val ERROR_TITLE = Regex("<title>[^<]*提示")
     }
 }
