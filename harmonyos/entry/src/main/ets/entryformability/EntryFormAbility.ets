@@ -3,6 +3,7 @@ import { Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { Prefs } from '../service/Prefs';
 import { CardData, CardSync, PowerSync } from '../service/PowerSync';
+import { Trigger } from '../service/SyncEngine';
 
 const TAG: string = 'EntryFormAbility';
 const DOMAIN: number = 0x0000;
@@ -57,9 +58,9 @@ export default class EntryFormAbility extends FormExtensionAbility {
     Prefs.removeFormId(formId).catch(() => {});
   }
 
-  /** 卡片进程拿不到 WebView 会话, 用快照 Cookie; 结果由 PowerSync 推到所有卡片 */
+  /** 卡片进程寿命很短, 只查询; 会话过期由后台任务恢复。结果由 PowerSync 推到所有卡片 */
   private refresh(): void {
-    PowerSync.syncNow('').catch((e: Error) => {
+    PowerSync.sync(Trigger.WIDGET).catch((e: Error) => {
       hilog.warn(DOMAIN, TAG, 'sync failed: %{public}s', e.message);
       CardSync.pushAll(false);
     });

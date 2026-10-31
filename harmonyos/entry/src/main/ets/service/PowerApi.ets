@@ -1,21 +1,40 @@
-import { http } from '@kit.NetworkKit';
-import { webview } from '@kit.ArkWeb';
+import { HttpRequest, HttpResponse, HttpTransport, IoError } from './Http';
 
 /** 新开普云缴费接口: 所有请求需同时携带 Cookie 与 Referer */
 export class PowerApi {
   static readonly HOST: string = 'h5cloud.17wanxiao.com';
   static readonly PORT: string = '18443';
+  static readonly OPEN_HOST: string = 'open.17wanxiao.com';
   static readonly SCHOOL_CODE: string = '784';
   static readonly CLIENT_ID: string = '513214c26445440fb9167a7159d9258b';
   static readonly UA: string = 'Mozilla/5.0 (Linux; OpenHarmony) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36';
 
-  static authorizeUrl(forceLogin: boolean): string {
-    const redirect: string = `https://${PowerApi.HOST}:${PowerApi.PORT}/CloudPayment/user/pay.do` +
+  /** 缴费应用根路径, SESSION 的 Path 就是它 */
+  static readonly SESSION_URL: string = `https://${PowerApi.HOST}:${PowerApi.PORT}/CloudPayment/`;
+  static readonly SESSION_PATH: string = '/CloudPayment/';
+  static readonly OPEN_URL: string = `https://${PowerApi.OPEN_HOST}/`;
+
+  private static redirectUri(): string {
+    return `https://${PowerApi.HOST}:${PowerApi.PORT}/CloudPayment/user/pay.do` +
       `?ecardFunc=index&paychannel=35&payUserSource=WX&flag=basicopengroup_xzmzjf` +
       `&hostType=OPEN_NEWCAP&appId=${PowerApi.CLIENT_ID}&versioncode=10431102&customer_code=${PowerApi.SCHOOL_CODE}`;
-    return 'https://open.17wanxiao.com/api/authorize?response_type=code&hidden=true' +
+  }
+
+  static authorizeUrl(forceLogin: boolean): string {
+    return `https://${PowerApi.OPEN_HOST}/api/authorize?response_type=code&hidden=true` +
       `&customerCode=${PowerApi.SCHOOL_CODE}&force_login=${forceLogin ? 'true' : 'false'}` +
-      `&redirect_uri=${encodeURIComponent(redirect)}&client_id=${PowerApi.CLIENT_ID}`;
+      `&redirect_uri=${encodeURIComponent(PowerApi.redirectUri())}&client_id=${PowerApi.CLIENT_ID}`;
+  }
+
+  /** 登录接口与授权页共用同一组查询参数 */
+  static loginUrl(authorizeUrl: string): string {
+    return `https://${PowerApi.OPEN_HOST}/api/login?${authorizeUrl.substring(authorizeUrl.indexOf('?') + 1)}`;
+  }
+
+  /** 登录成功后页面脚本跳转的地址 */
+  static postLoginAuthorizeUrl(): string {
+    return `https://${PowerApi.OPEN_HOST}/api/authorize?client_id=${PowerApi.CLIENT_ID}&response_type=code` +
+      `&redirect_uri=${encodeURIComponent(PowerApi.redirectUri())}&state=`;
   }
 
   static roomStateUrl(payProId: string, roomVerify: string): string {
@@ -27,26 +46,6 @@ export class PowerApi {
   static referer(payProId: string): string {
     return `https://${PowerApi.HOST}:${PowerApi.PORT}/CloudPayment/bill/selectPayProject.do` +
       `?txcode=2&interurl=substituted_pay&payProId=${payProId}&amtflag=0&payamt=1000`;
-  }
-
-  /** 从 WebView CookieManager 取会话 Cookie(SESSION 的 Path=/CloudPayment/, 必须带路径取) */
-  static sessionCookie(): string {
-    const live: string = webview.WebCookieManager.fetchCookieSync(`https://${PowerApi.HOST}:${PowerApi.PORT}/CloudPayment/`);
-    if (live.includes('SESSION=')) {
-      return live;
-    }
-    return '';
-  }
-
-  static parseCookieValue(cookie: string, name: string): string {
-    const parts: string[] = cookie.split(';');
-    for (let i = 0; i < parts.length; i++) {
-      const kv: string[] = parts[i].trim().split('=');
-      if (kv.length >= 2 && kv[0] === name) {
-        return kv.slice(1).join('=');
-      }
-    }
-    return '';
   }
 
   static extractParam(url: string, name: string): string {
@@ -65,83 +64,100 @@ export class PowerApi {
   }
 }
 
+export enum RoomKind {
+  /** 取到了有效读数, 0 也是有效电量 */
+  VALID,
+  /** 形态与失效会话一致, 但也可能真是系统繁忙, 只有恢复认证后重查才能确认 */
+  SESSION_SUSPECT,
+  TRANSIENT,
+  UNKNOWN
+}
+
+export class RoomResult {
+  kind: RoomKind;
+  quantity: number = 0;
+  unit: string = '度';
+  roomLabel: string = '';
+  message: string;
+  setCookies: string[];
+
+  constructor(kind: RoomKind, message: string, setCookies: string[] = []) {
+    this.kind = kind;
+    this.message = message;
+    this.setCookies = setCookies;
+  }
+
+  get ok(): boolean {
+    return this.kind === RoomKind.VALID;
+  }
+}
+
 /** getRoomState.do 响应体 */
 class RoomStateVO {
-  returncode: string = '';
-  returnmsg: string = '';
-  quantity: string = '0';
-  quantityunit: string = '度';
-  description: string = '';
+  returncode?: string;
+  returnmsg?: string;
+  quantity?: string | number;
+  quantityunit?: string;
+  description?: string;
 }
 
-export interface RoomState {
-  ok: boolean;
-  sessionDead: boolean;
-  quantity: number;
-  unit: string;
-  roomLabel: string;
-  message: string;
-  setCookie: string;
-}
-
-export class PowerResult {
-  static empty(): RoomState {
-    return { ok: false, sessionDead: false, quantity: 0, unit: '度', roomLabel: '', message: '', setCookie: '' };
+function finiteQuantity(raw: string | number | undefined): number | null {
+  const text: string = raw === undefined || raw === null ? '' : String(raw).trim();
+  if (text.length === 0) {
+    return null;
   }
+  const n: number = Number(text);
+  return isFinite(n) ? n : null;
 }
 
-/** 查询剩余电量(阻塞网络调用, 请在任务线程使用) */
-export async function queryRoomState(payProId: string, roomVerify: string, cookie: string): Promise<RoomState> {
-  if (cookie.length === 0) {
-    const r: RoomState = PowerResult.empty();
-    r.sessionDead = true;
-    r.message = '无会话';
-    return r;
+export function classifyRoom(status: number, body: string, setCookies: string[]): RoomResult {
+  if (status === 429 || status >= 500) {
+    return new RoomResult(RoomKind.TRANSIENT, `服务器暂时不可用(${status})`, setCookies);
   }
-  const url: string = PowerApi.roomStateUrl(payProId, roomVerify);
-  return queryUrl(url, cookie, PowerApi.referer(payProId));
-}
-
-export async function queryUrl(url: string, cookie: string, referer: string): Promise<RoomState> {
-  const req: http.HttpRequest = http.createHttp();
-  try {
-    const resp: http.HttpResponse = await req.request(url, {
-      method: http.RequestMethod.GET,
-      header: {
-        'Cookie': cookie,
-        'Referer': referer,
-        'User-Agent': PowerApi.UA,
-        'Accept': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest'
-      },
-      expectDataType: http.HttpDataType.STRING,
-      connectTimeout: 15000,
-      readTimeout: 15000
-    });
-    const setCookie: string = resp.cookies !== undefined ? resp.cookies : '';
-    const body: string = typeof resp.result === 'string' ? resp.result : JSON.stringify(resp.result);
-    if (body.startsWith('{')) {
-      const vo: RoomStateVO = JSON.parse(body) as RoomStateVO;
-      const state: RoomState = PowerResult.empty();
-      state.ok = vo.returncode === '100';
-      state.sessionDead = vo.returncode !== '100';
-      state.quantity = parseFloat(vo.quantity);
-      state.unit = vo.quantityunit.length > 0 ? vo.quantityunit : '度';
-      state.roomLabel = vo.description;
-      state.message = vo.returnmsg.length > 0 ? vo.returnmsg : vo.returncode;
-      state.setCookie = setCookie;
-      return state;
+  const text: string = body.trimStart();
+  if (text.startsWith('{')) {
+    let vo: RoomStateVO;
+    try {
+      vo = JSON.parse(text) as RoomStateVO;
+    } catch (e) {
+      return new RoomResult(RoomKind.UNKNOWN, '响应格式异常', setCookies);
     }
-    const r2: RoomState = PowerResult.empty();
-    r2.sessionDead = body.includes('ERROR');
-    r2.message = body.substring(0, 80);
-    r2.setCookie = setCookie;
-    return r2;
+    const quantity: number | null = finiteQuantity(vo.quantity);
+    const rc: string = vo.returncode !== undefined ? vo.returncode : '';
+    if (rc === '100' && quantity !== null) {
+      const r: RoomResult = new RoomResult(RoomKind.VALID, rc, setCookies);
+      r.quantity = quantity;
+      r.unit = vo.quantityunit !== undefined && vo.quantityunit.length > 0 ? vo.quantityunit : '度';
+      r.roomLabel = vo.description !== undefined ? vo.description : '';
+      return r;
+    }
+    const msg: string = vo.returnmsg !== undefined && vo.returnmsg.length > 0 ? vo.returnmsg : rc;
+    return new RoomResult(RoomKind.UNKNOWN, msg, setCookies);
+  }
+  // 失效/缺失会话的实测响应: HTTP 200 + "RspBaseVO [code=ERROR, msg=系统繁忙...]"
+  if (text.startsWith('RspBaseVO') && text.includes('code=ERROR')) {
+    return new RoomResult(RoomKind.SESSION_SUSPECT, '会话可能已失效', setCookies);
+  }
+  return new RoomResult(RoomKind.UNKNOWN, text.substring(0, 80), setCookies);
+}
+
+/** 查询剩余电量 */
+export async function fetchRoom(http: HttpTransport, url: string, cookie: string, referer: string,
+  timeoutMs: number): Promise<RoomResult> {
+  const headers: Record<string, string> = {
+    'Cookie': cookie,
+    'Referer': referer,
+    'User-Agent': PowerApi.UA,
+    'Accept': 'application/json',
+    'X-Requested-With': 'XMLHttpRequest'
+  };
+  try {
+    const r: HttpResponse = await http.send(new HttpRequest(url, headers, timeoutMs));
+    return classifyRoom(r.status, r.body, r.setCookies);
   } catch (e) {
-    const r3: RoomState = PowerResult.empty();
-    r3.message = `网络错误: ${e instanceof Error ? e.message : String(e)}`;
-    return r3;
-  } finally {
-    req.destroy();
+    if (e instanceof IoError) {
+      return new RoomResult(RoomKind.TRANSIENT, `网络错误: ${e.message}`);
+    }
+    throw e as Error;
   }
 }

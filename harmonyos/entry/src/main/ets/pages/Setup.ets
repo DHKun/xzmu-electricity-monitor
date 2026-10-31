@@ -1,8 +1,12 @@
 import { common } from '@kit.AbilityKit';
 import { webview } from '@kit.ArkWeb';
 import { Prefs } from '../service/Prefs';
-import { PowerApi, queryUrl, RoomState } from '../service/PowerApi';
+import { Deadline } from '../service/Http';
+import { KitTransport } from '../service/HttpClient';
+import { fetchRoom, PowerApi, RoomKind, RoomResult } from '../service/PowerApi';
+import { AlertNotify } from '../service/AlertEval';
 import { CardSync } from '../service/PowerSync';
+import { WebSession } from './WebSession';
 import { bumpData } from './Actions';
 import { Credentials, CredData } from '../service/Credentials';
 
@@ -268,17 +272,15 @@ export struct SetupPage {
     }
     this.binding = true;
     this.verifying = true;
-    let cookie: string = PowerApi.sessionCookie();
-    if (cookie.length === 0) {
-      cookie = Prefs.getCookieSnapshot();
-    }
-    queryUrl(PowerApi.roomStateUrl(payProId, roomVerify), cookie, PowerApi.referer(payProId))
-      .then((r: RoomState) => {
+    fetchRoom(new KitTransport(), PowerApi.roomStateUrl(payProId, roomVerify), WebSession.payCookie(),
+      PowerApi.referer(payProId), Deadline.REQUEST_TIMEOUT_MS)
+      .then((r: RoomResult) => {
         this.binding = false;
         this.verifying = false;
-        if (r.ok && r.quantity > 0) {
+        if (r.ok) {
           const label: string = r.roomLabel.length > 0 ? r.roomLabel : roomVerify;
-          Prefs.saveBinding(payProId, roomVerify, label, cookie, r.quantity).then(() => {
+          Prefs.saveBinding(payProId, roomVerify, label, WebSession.serialized(r.setCookies), r.quantity).then(() => {
+            AlertNotify.cancelLogin();
             CardSync.pushAll(false);
             this.saveCredsIfOptedIn();
             bumpData();
@@ -290,7 +292,7 @@ export struct SetupPage {
               this.stack.clear();
             }
           });
-        } else if (r.sessionDead) {
+        } else if (r.kind === RoomKind.SESSION_SUSPECT) {
           this.hintText = '会话无效, 请重新登录后再选择房间';
         } else {
           this.hintText = `验证失败: ${r.message}, 请确认页面已显示剩余电量`;

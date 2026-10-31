@@ -29,7 +29,7 @@ export class PowerView {
   /** 近 7 天每日用电, 最后一项是今天 */
   week: DayUse[] = [];
   lastAt: number = 0;
-  sessionDead: boolean = false;
+  needsLogin: boolean = false;
   threshold: number = 20;
 }
 
@@ -39,7 +39,7 @@ export class PowerStatus {
     v.configured = Prefs.getConfigured();
     v.room = Prefs.getRoomLabel();
     v.threshold = Prefs.getThreshold();
-    v.sessionDead = Prefs.isSessionDead();
+    v.needsLogin = Prefs.getNeedsLogin();
     v.lastAt = Prefs.getLastAt();
     v.qty = Prefs.getLastQty();
     if (v.qty < 0) {

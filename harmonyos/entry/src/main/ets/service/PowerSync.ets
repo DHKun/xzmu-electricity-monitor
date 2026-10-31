@@ -1,9 +1,14 @@
 import { formBindingData, formProvider } from '@kit.FormKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { Prefs } from './Prefs';
-import { PowerResult, queryRoomState, RoomState } from './PowerApi';
+import { Prefs, RunLock } from './Prefs';
 import { AlertEval, AlertNotify } from './AlertEval';
+import { Credentials } from './Credentials';
+import { CookieJar } from './CookieJar';
+import { HttpTransport } from './Http';
+import { KitTransport } from './HttpClient';
+import { PowerApi } from './PowerApi';
 import { PowerLevel, PowerStatus, PowerView } from './PowerStatus';
+import { CredsRead, Outcome, Stage, SyncCommit, SyncEngine, SyncReport, SyncSnapshot, SyncStore, Trigger } from './SyncEngine';
 
 const TAG: string = 'PowerSync';
 const DOMAIN: number = 0x0000;
@@ -31,8 +36,8 @@ export class CardSync {
     card.pct = v.percent;
     card.time = PowerStatus.fmtShortTime(v.lastAt);
     card.busy = busy;
-    if (v.sessionDead) {
-      card.sub = '登录已过期';
+    if (v.needsLogin) {
+      card.sub = '需要重新登录';
     } else if (v.daysLeft >= 0) {
       card.sub = `约可用 ${v.daysLeft} 天`;
     } else {
@@ -57,51 +62,60 @@ export class CardSync {
   }
 }
 
-export class PowerSync {
-  /**
-   * 查询并把结果落到所有地方: 存储、低电量通知、桌面卡片.
-   * liveCookie 为 WebView 里的实时会话(仅 App 进程能拿到), 为空时用快照.
-   */
-  static async syncNow(liveCookie: string): Promise<RoomState> {
-    Prefs.reload();
+class PrefsSyncStore implements SyncStore {
+  begin(): SyncSnapshot | null {
     if (!Prefs.getConfigured()) {
-      const r: RoomState = PowerResult.empty();
-      r.message = '未绑定';
-      return r;
+      return null;
     }
-    const cookie: string = liveCookie.length > 0 ? liveCookie : Prefs.getCookieSnapshot();
-    const r: RoomState = await queryRoomState(Prefs.getPayProId(), Prefs.getRoomVerify(), cookie);
-    const refreshed: string = PowerSync.mergeSession(cookie, r.setCookie);
-    if (r.ok && r.quantity > 0) {
-      if (refreshed.length > 0) {
-        await Prefs.setCookieSnapshot(refreshed);
-      }
-      await Prefs.recordReading(r.quantity);
-      await AlertEval.evaluate(r.quantity, r.unit);
-    } else if (r.sessionDead) {
-      const wasDead: boolean = Prefs.isSessionDead();
-      await Prefs.setSessionDead(true);
-      if (!wasDead) {
-        AlertNotify.publish('电费监控: 登录已过期', '打开 App 重新登录一次即可恢复自动查询');
-      }
+    const snapshot: SyncSnapshot = Prefs.syncSnapshot();
+    // 卡片和后台进程读不到 WebView, 未迁移时只能用旧版快照; 成功后随提交落盘
+    if (!Prefs.hasCookieJar()) {
+      const jar: CookieJar = new CookieJar();
+      jar.importPlain(PowerApi.HOST, PowerApi.SESSION_PATH, Prefs.getCookieSnapshot());
+      snapshot.cookies = jar.serialize();
     }
-    CardSync.pushAll(false);
-    return r;
+    return snapshot;
   }
 
-  /** 服务端轮换 SESSION 时, 把新值合并进原 Cookie 串 */
-  static mergeSession(cookie: string, setCookie: string): string {
-    const m: RegExpMatchArray | null = setCookie.match(new RegExp('SESSION=([^;,\\s]+)'));
-    if (m === null) {
-      return cookie;
+  creds(): CredsRead {
+    return Credentials.forLogin();
+  }
+
+  commit(base: SyncSnapshot, commit: SyncCommit): Promise<boolean> {
+    return Prefs.commitSync(base, commit);
+  }
+}
+
+export class PowerSync {
+  /** 同步入口: 首页、后台任务、桌面卡片共用; 文件锁保证跨进程同一时间只有一轮 */
+  static async sync(trigger: Trigger, cancelled: () => boolean = () => false, onRecovering: () => void = () => {},
+    http: HttpTransport = new KitTransport()): Promise<SyncReport> {
+    Prefs.reload();
+    const lock: RunLock | null = Prefs.tryRunLock();
+    if (lock === null) {
+      CardSync.pushAll(false);
+      return new SyncReport(Outcome.BUSY, Stage.QUERY);
     }
-    const fresh: string = `SESSION=${m[1]}`;
-    if (cookie.length === 0) {
-      return fresh;
+    const startedAt: number = Date.now();
+    try {
+      const engine: SyncEngine = new SyncEngine(new PrefsSyncStore(), http, () => Date.now());
+      const r: SyncReport = await engine.run(trigger, cancelled, onRecovering);
+      Prefs.reload();
+      let lowAlertBlocked: boolean = false;
+      if (r.outcome === Outcome.OK && r.quantity !== null) {
+        lowAlertBlocked = await AlertEval.evaluate(r.quantity, r.unit);
+        await AlertNotify.cancelLogin();
+      }
+      const loginPending: boolean = Prefs.getNeedsLogin() && !Prefs.isManualAlerted();
+      const loginPosted: boolean = loginPending && await AlertNotify.login();
+      if (loginPosted) {
+        await Prefs.setManualAlerted(true);
+      }
+      await Prefs.appendRun(startedAt, trigger, r, lowAlertBlocked || (loginPending && !loginPosted));
+      CardSync.pushAll(false);
+      return r;
+    } finally {
+      lock.release();
     }
-    if (cookie.includes('SESSION=')) {
-      return cookie.replace(new RegExp('SESSION=[^;]*'), fresh);
-    }
-    return `${cookie}; ${fresh}`;
   }
 }

@@ -2,8 +2,9 @@ import { common } from '@kit.AbilityKit';
 import { uiObserver } from '@kit.ArkUI';
 import { notificationManager } from '@kit.NotificationKit';
 import { Prefs } from '../service/Prefs';
-import { PowerApi, RoomState } from '../service/PowerApi';
 import { PowerSync } from '../service/PowerSync';
+import { Outcome, Stage, SyncReport, Trigger } from '../service/SyncEngine';
+import { WebSession } from './WebSession';
 import { DayUse, PowerLevel, PowerStatus, PowerView } from '../service/PowerStatus';
 import { DATA_VERSION, pickThreshold, requestNotify } from './Actions';
 import { setStatusBarLight } from './SystemBar';
@@ -23,9 +24,10 @@ struct Index {
   @State querying: boolean = false;
   @State statusText: string = '';
   @State bp: string = 'sm';
+  @State recovering: boolean = false;
   @State reloginActive: boolean = false;
   private reloginCreds: CredData = new CredData();
-  private reloginTried: boolean = false;
+  private webFallbackTried: boolean = false;
   private notifyOn: boolean = true;
   private scroller: Scroller = new Scroller();
 
@@ -48,9 +50,7 @@ struct Index {
     notificationManager.isNotificationEnabled().then((on: boolean) => {
       this.notifyOn = on;
     }).catch(() => {});
-    if (this.view.configured && this.view.sessionDead && Credentials.has()) {
-      this.autoRelogin();
-    } else if (this.view.configured && Date.now() - this.view.lastAt > 60 * 1000) {
+    if (this.view.configured && Date.now() - this.view.lastAt > 60 * 1000) {
       this.query();
     }
   }
@@ -76,39 +76,42 @@ struct Index {
     }
     this.querying = true;
     this.statusText = '';
-    let live: string = '';
-    try {
-      live = PowerApi.sessionCookie();
-    } catch (e) {
-      // WebView 内核未就绪时拿不到实时会话, 用快照
-    }
-    PowerSync.syncNow(live).then((r: RoomState) => {
-      // 会话过期且存了凭据: 先静默续期再查一次, 用户无感
-      if (r.sessionDead && !this.reloginTried && Credentials.has()) {
+    WebSession.migrateIfNeeded()
+      .then(() => PowerSync.sync(Trigger.USER, () => false, () => {
+        this.recovering = true;
+      }))
+      .then((r: SyncReport) => {
+        this.onSynced(r);
+      })
+      .catch(() => {
+        this.statusText = '查询失败, 请检查网络';
         this.finishQuery();
-        this.autoRelogin();
-        return;
-      }
-      if (r.ok) {
-        // 查询成功后解锁续期开关, 下次过期再触发
-        this.reloginTried = false;
-      } else if (!r.sessionDead) {
-        this.statusText = `查询失败: ${r.message}`;
-      }
-      this.finishQuery();
-    }).catch(() => {
-      this.statusText = '查询失败, 请检查网络';
-      this.finishQuery();
-    });
+      });
+  }
+
+  onSynced(r: SyncReport): void {
+    this.finishQuery();
+    // 登录协议对不上时才退回页面方式, 每次打开页面最多一次
+    if (r.outcome === Outcome.UNKNOWN && r.stage === Stage.AUTH && !this.webFallbackTried && Credentials.has()) {
+      this.webFallbackTried = true;
+      this.autoRelogin();
+      return;
+    }
+    if (r.outcome === Outcome.TRANSIENT || r.outcome === Outcome.UNKNOWN) {
+      this.statusText = `查询失败: ${r.message}`;
+    } else if (r.outcome === Outcome.SKIPPED) {
+      this.statusText = r.message;
+    }
   }
 
   finishQuery(): void {
     this.querying = false;
+    this.recovering = false;
     this.refreshing = false;
     this.reload();
   }
 
-  /** 用保存的凭据在隐藏 Web 里自动登录, 成功后再查一次 */
+  /** 隐藏 Web 登录, 成功后换入新会话再查一次 */
   autoRelogin(): void {
     if (this.reloginActive) {
       return;
@@ -118,7 +121,6 @@ struct Index {
       this.statusText = '自动登录失败, 请手动重新登录';
       return;
     }
-    this.reloginTried = true;
     this.reloginCreds = c;
     this.statusText = '';
     this.reloginActive = true;
@@ -127,7 +129,11 @@ struct Index {
   onReloginResult(ok: boolean): void {
     this.reloginActive = false;
     if (ok) {
-      this.query();
+      WebSession.adopt().then(() => {
+        this.query();
+      }).catch(() => {
+        this.statusText = '自动登录失败, 请手动重新登录';
+      });
     } else {
       this.statusText = '自动登录失败, 请手动重新登录';
       this.reload();
@@ -261,7 +267,7 @@ struct Index {
       Text(this.headline())
         .fontSize(20)
         .fontColor($r('app.color.on_sky'))
-      Text(this.reloginActive ? '正在自动登录…' : (this.querying ? '正在查询…' : PowerStatus.fmtTime(this.view.lastAt)))
+      Text(this.reloginActive || this.recovering ? '正在自动登录…' : (this.querying ? '正在查询…' : PowerStatus.fmtTime(this.view.lastAt)))
         .fontSize(14)
         .fontColor($r('app.color.on_sky_secondary'))
         .margin({ top: 6 })
@@ -277,11 +283,11 @@ struct Index {
       SymbolGlyph($r('sys.symbol.exclamationmark_triangle_fill'))
         .fontSize(18)
         .fontColor([$r('app.color.on_sky')])
-      Text(this.statusText.length > 0 ? this.statusText : '登录已过期, 重新绑定后即可恢复查询')
+      Text(this.statusText.length > 0 ? this.statusText : '需要重新登录, 登录后即可恢复监控')
         .fontSize(14)
         .fontColor($r('app.color.on_sky'))
         .layoutWeight(1)
-      if (this.view.sessionDead) {
+      if (this.view.needsLogin) {
         Text('重新登录')
           .fontSize(14)
           .fontWeight(FontWeight.Medium)
@@ -441,7 +447,7 @@ struct Index {
   @Builder
   cards() {
     Column({ space: 12 }) {
-      if (!this.reloginActive && (this.statusText.length > 0 || this.view.sessionDead)) {
+      if (!this.reloginActive && (this.statusText.length > 0 || this.view.needsLogin)) {
         this.banner()
       }
       this.weekCard()
