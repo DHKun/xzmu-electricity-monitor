@@ -90,8 +90,9 @@ export class PowerSync {
   /** 同步入口: 首页、后台任务、桌面卡片共用; 文件锁保证跨进程同一时间只有一轮 */
   static async sync(trigger: Trigger, cancelled: () => boolean = () => false, onRecovering: () => void = () => {},
     http: HttpTransport = new KitTransport()): Promise<SyncReport> {
-    Prefs.reload();
     const lock: RunLock | null = Prefs.tryRunLock();
+    // 必须在拿到锁之后读: 否则可能用到上一轮提交之前的退避状态
+    Prefs.reload();
     if (lock === null) {
       CardSync.pushAll(false);
       return new SyncReport(Outcome.BUSY, Stage.QUERY);

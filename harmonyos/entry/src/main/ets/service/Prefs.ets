@@ -65,12 +65,22 @@ export class Prefs {
     return Prefs.store;
   }
 
-  /** 先 reload 再同步写入, 写入与落盘之间不让出线程 */
+  /**
+   * 所有写入都走这里。flush 落盘的是整份存储, 必须持跨进程锁并基于最新内容修改,
+   * 否则会用旧内容盖掉别的进程刚写入的数据; reload 只是刷新缓存, 不是互斥。
+   */
   private static async write(apply: (sp: preferences.Preferences) => void): Promise<void> {
-    Prefs.reload();
-    const sp: preferences.Preferences = Prefs.sp();
-    apply(sp);
-    await sp.flush();
+    const file: fileIo.File = Prefs.lockFile('state.lock');
+    const lock: RunLock = new RunLock(file);
+    try {
+      await file.lock(true);
+      Prefs.reload();
+      const sp: preferences.Preferences = Prefs.sp();
+      apply(sp);
+      await sp.flush();
+    } finally {
+      lock.release();
+    }
   }
 
   static getConfigured(): boolean {
@@ -153,17 +163,6 @@ export class Prefs {
     }
   }
 
-  /** 绑定、会话、提交的"读检查再写"临界区; reload 只是刷新缓存, 不是互斥 */
-  private static async locked(body: () => Promise<void>): Promise<void> {
-    const file: fileIo.File = Prefs.lockFile('state.lock');
-    const lock: RunLock = new RunLock(file);
-    try {
-      await file.lock(true);
-      await body();
-    } finally {
-      lock.release();
-    }
-  }
 
   private static gen(sp: preferences.Preferences, key: string): number {
     return sp.getSync(key, 0) as number;
@@ -203,59 +202,51 @@ export class Prefs {
   /** 一轮同步的结果一次性落盘; 期间绑定或会话变过就整体放弃 */
   static async commitSync(base: SyncSnapshot, c: SyncCommit): Promise<boolean> {
     let committed: boolean = false;
-    await Prefs.locked(async () => {
-      await Prefs.write((sp: preferences.Preferences) => {
-        if (!Prefs.getConfigured() || Prefs.gen(sp, 'bindingGen') !== base.bindingGen ||
-          Prefs.gen(sp, 'sessionGen') !== base.sessionGen) {
-          return;
-        }
-        Prefs.putRecovery(sp, c.state);
-        if (!c.state.needsLogin) {
-          sp.putSync('manualAlerted', false);
-        }
-        if (c.cookies !== null) {
-          sp.putSync('cookieJar', c.cookies);
-        }
-        if (c.quantity !== null) {
-          Prefs.applyReading(sp, c.quantity);
-        }
-        committed = true;
-      });
+    await Prefs.write((sp: preferences.Preferences) => {
+      if (!Prefs.getConfigured() || Prefs.gen(sp, 'bindingGen') !== base.bindingGen ||
+        Prefs.gen(sp, 'sessionGen') !== base.sessionGen) {
+        return;
+      }
+      Prefs.putRecovery(sp, c.state);
+      if (!c.state.needsLogin) {
+        sp.putSync('manualAlerted', false);
+      }
+      if (c.cookies !== null) {
+        sp.putSync('cookieJar', c.cookies);
+      }
+      if (c.quantity !== null) {
+        Prefs.applyReading(sp, c.quantity);
+      }
+      committed = true;
     });
     return committed;
   }
 
   static async seedCookieJar(cookies: string): Promise<void> {
-    await Prefs.locked(async () => {
-      await Prefs.write((sp: preferences.Preferences) => {
-        if (!sp.hasSync('cookieJar')) {
-          sp.putSync('cookieJar', cookies);
-        }
-      });
+    await Prefs.write((sp: preferences.Preferences) => {
+      if (!sp.hasSync('cookieJar')) {
+        sp.putSync('cookieJar', cookies);
+      }
     });
   }
 
   /** 新的交互登录生效: 更新会话代次, 让进行中的同步作废, 并解除认证退避 */
   static async replaceSession(cookies: string): Promise<void> {
-    await Prefs.locked(async () => {
-      await Prefs.write((sp: preferences.Preferences) => {
-        sp.putSync('cookieJar', cookies);
-        sp.putSync('sessionGen', Prefs.gen(sp, 'sessionGen') + 1);
-        const r: RecoveryState = Prefs.recovery();
-        r.failCount = 0;
-        r.nextAttemptAt = 0;
-        r.authBackoff = false;
-        Prefs.putRecovery(sp, r);
-      });
+    await Prefs.write((sp: preferences.Preferences) => {
+      sp.putSync('cookieJar', cookies);
+      sp.putSync('sessionGen', Prefs.gen(sp, 'sessionGen') + 1);
+      const r: RecoveryState = Prefs.recovery();
+      r.failCount = 0;
+      r.nextAttemptAt = 0;
+      r.authBackoff = false;
+      Prefs.putRecovery(sp, r);
     });
   }
 
   /** 登录凭据变了: 进行中的认证结果不得再写回 */
   static async bumpSessionGen(): Promise<void> {
-    await Prefs.locked(async () => {
-      await Prefs.write((sp: preferences.Preferences) => {
-        sp.putSync('sessionGen', Prefs.gen(sp, 'sessionGen') + 1);
-      });
+    await Prefs.write((sp: preferences.Preferences) => {
+      sp.putSync('sessionGen', Prefs.gen(sp, 'sessionGen') + 1);
     });
   }
 
@@ -332,21 +323,19 @@ export class Prefs {
   /** 绑定新房间: 读数历史、告警与恢复状态一并重置, 代次变化让进行中的旧同步作废 */
   static async saveBinding(payProId: string, roomVerify: string, roomLabel: string,
                            cookies: string, qty: number): Promise<void> {
-    await Prefs.locked(async () => {
-      await Prefs.write((sp: preferences.Preferences) => {
-        sp.putSync('payProId', payProId);
-        sp.putSync('roomVerify', roomVerify);
-        sp.putSync('roomLabel', roomLabel);
-        sp.putSync('cookieJar', cookies);
-        sp.putSync('samples', '');
-        sp.putSync('peakQty', -1.0);
-        sp.putSync('alerted', false);
-        sp.putSync('manualAlerted', false);
-        sp.putSync('configured', true);
-        sp.putSync('bindingGen', Prefs.gen(sp, 'bindingGen') + 1);
-        Prefs.putRecovery(sp, new RecoveryState());
-        Prefs.applyReading(sp, qty);
-      });
+    await Prefs.write((sp: preferences.Preferences) => {
+      sp.putSync('payProId', payProId);
+      sp.putSync('roomVerify', roomVerify);
+      sp.putSync('roomLabel', roomLabel);
+      sp.putSync('cookieJar', cookies);
+      sp.putSync('samples', '');
+      sp.putSync('peakQty', -1.0);
+      sp.putSync('alerted', false);
+      sp.putSync('manualAlerted', false);
+      sp.putSync('configured', true);
+      sp.putSync('bindingGen', Prefs.gen(sp, 'bindingGen') + 1);
+      Prefs.putRecovery(sp, new RecoveryState());
+      Prefs.applyReading(sp, qty);
     });
   }
 
