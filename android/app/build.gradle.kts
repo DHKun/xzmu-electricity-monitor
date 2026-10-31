@@ -14,8 +14,8 @@ android {
         applicationId = "io.github.dhkun.xzmupower"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "1.4.0"
+        versionCode = 7
+        versionName = "1.5.0"
     }
 
     // 发布签名密钥放在构建机 ~/.keystores/xzmupower.properties(不入库);
