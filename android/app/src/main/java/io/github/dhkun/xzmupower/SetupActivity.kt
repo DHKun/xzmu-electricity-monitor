@@ -243,17 +243,17 @@ class SetupActivity : AppCompatActivity() {
         doneBtn.isEnabled = false
         doneBtn.text = "正在验证…"
         exec.execute {
-            val cookie = CookieManager.getInstance()
-                .getCookie("https://" + PowerApi.HOST + ":" + PowerApi.PORT + "/CloudPayment/")
-            val r = PowerApi.queryUrl(this, PowerApi.roomStateUrl(payProId, roomVerify),
-                cookie ?: "", PowerApi.referer(payProId))
+            val cookie = CookieManager.getInstance().getCookie(PowerApi.SESSION_URL)
+            val r = PowerApi.fetchRoom(UrlTransport, PowerApi.roomStateUrl(payProId, roomVerify),
+                cookie ?: "", PowerApi.referer(payProId), Deadline.REQUEST_TIMEOUT_MS.toInt())
             runOnUiThread {
                 binding = false
                 doneBtn.isEnabled = true
                 doneBtn.text = "已看到剩余电量, 完成绑定"
                 if (r.ok && r.quantity != null) {
                     Prefs.saveBinding(this, payProId, roomVerify, r.roomLabel)
-                    Prefs.setCookieSnapshot(this, cookie)
+                    WebSession.adoptInteractiveLogin(this)
+                    AlertNotify.cancelLogin(this)
                     Prefs.recordReading(this, r.quantity.toFloat())
                     saveCredsIfOptedIn()
                     PowerWidget.updateAll(this)

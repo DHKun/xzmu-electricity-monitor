@@ -11,7 +11,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 
 /**
- * 会话过期后的静默重新登录(无界面)。
+ * 页面方式的静默重新登录(无界面): 后台 HTTP 恢复遇到无法识别的登录页面时, 首页用它兜底。
  *
  * 做法等同于用户手动登录: 隐藏 WebView 打开授权页, 填入本机保存的账号密码、点登录按钮,
  * 由登录页自己的脚本提交。先试 force_login=false —— 若完美校园的 SSO 仍在, 会直接换到

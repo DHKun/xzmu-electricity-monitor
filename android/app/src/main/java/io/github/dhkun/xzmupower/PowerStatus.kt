@@ -32,7 +32,7 @@ data class PowerView(
     /** 近 7 天每日用电, 最后一项是今天 */
     val week: List<DayUse>,
     val lastAt: Long,
-    val sessionDead: Boolean,
+    val needsLogin: Boolean,
     val threshold: Float,
 )
 
@@ -54,7 +54,7 @@ object PowerStatus {
             daysLeft = if (qty >= 0 && daily > 0.05f) floor(qty / daily).toInt() else -1,
             week = lastWeek(samples),
             lastAt = Prefs.lastCheck(ctx),
-            sessionDead = Prefs.sessionDead(ctx),
+            needsLogin = Prefs.needsLogin(ctx),
             threshold = threshold,
         )
     }

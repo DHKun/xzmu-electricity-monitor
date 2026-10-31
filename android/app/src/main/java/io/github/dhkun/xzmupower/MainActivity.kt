@@ -24,16 +24,12 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.core.widget.NestedScrollView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.WorkManager
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import java.util.Locale
 import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
 
 /** 首页: 仿 Pixel 天气, 只放数据; 设置项在 SettingsActivity */
 class MainActivity : AppCompatActivity() {
@@ -46,6 +42,7 @@ class MainActivity : AppCompatActivity() {
     private var appliedDynamic = false
     private var shownQty = -1f
     private var autoReloginActive = false
+    private var webFallbackTried = false
     /** 承载隐藏的自动登录 WebView */
     private val content: ViewGroup by lazy { findViewById(android.R.id.content) }
 
@@ -98,7 +95,7 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, SetupActivity::class.java).putExtra(SetupActivity.EXTRA_REBIND, true))
         }
 
-        schedulePeriodic()
+        QueryWorker.schedule(this)
         if (Actions.needsPermissionPrompt(this)) {
             notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
@@ -112,10 +109,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         render()
-        if (Prefs.sessionDead(this) && Credentials.has(this)) {
-            // 已知会话过期且存了凭据: 直接静默续期, 不必先失败一次
-            autoRelogin()
-        } else if (System.currentTimeMillis() - Prefs.lastCheck(this) > 60_000) {
+        if (System.currentTimeMillis() - Prefs.lastCheck(this) > 60_000) {
             swipe.isRefreshing = true
             query()
         }
@@ -153,43 +147,49 @@ class MainActivity : AppCompatActivity() {
         tile(id).findViewById<TextView>(R.id.tileDesc).text = desc
     }
 
-    private fun query(allowRelogin: Boolean = true) {
+    private fun query() {
         if (querying) return
         querying = true
         render()
         exec.execute {
-            val r = PowerSync.sync(this)
-            runOnUiThread {
-                querying = false
-                swipe.isRefreshing = false
-                // 会话过期且存了凭据: 先静默续期再查一次, 用户无感
-                if (r.sessionDead && allowRelogin && Credentials.has(this)) {
-                    autoRelogin()
-                    return@runOnUiThread
-                }
-                errorText = when {
-                    r.sessionDead -> "登录已过期, 重新登录后即可恢复查询"
-                    !r.ok -> "查询失败: ${r.message}"
-                    else -> null
-                }
-                if (r.ok && Build.VERSION.SDK_INT >= 30) {
-                    swipe.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-                }
-                render()
-            }
+            val r = PowerSync.sync(this, Trigger.USER, onRecovering = {
+                runOnUiThread { autoReloginActive = true; render() }
+            })
+            runOnUiThread { onSynced(r) }
         }
     }
 
-    /** 用保存的凭据在隐藏 WebView 里自动登录, 成功后再查一次 */
-    private fun autoRelogin() {
-        if (autoReloginActive) return
+    private fun onSynced(r: SyncReport) {
+        querying = false
+        autoReloginActive = false
+        swipe.isRefreshing = false
+        // 登录协议对不上时才退回页面方式, 每次打开页面最多一次
+        if (r.outcome == Outcome.UNKNOWN && r.stage == Stage.AUTH && !webFallbackTried && Credentials.has(this)) {
+            webFallbackTried = true
+            webFallbackLogin()
+            return
+        }
+        errorText = when (r.outcome) {
+            Outcome.TRANSIENT, Outcome.UNKNOWN -> "查询失败: ${r.message}"
+            Outcome.SKIPPED -> r.message.ifEmpty { null }
+            else -> null
+        }
+        if (r.outcome == Outcome.OK && Build.VERSION.SDK_INT >= 30) {
+            swipe.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+        }
+        render()
+    }
+
+    /** 隐藏 WebView 登录, 成功后换入新会话再查一次 */
+    private fun webFallbackLogin() {
         autoReloginActive = true
         errorText = null
         render()
         SilentLogin(this, content).start { ok ->
             autoReloginActive = false
             if (ok) {
-                query(allowRelogin = false)
+                WebSession.adoptInteractiveLogin(this)
+                query()
             } else {
                 errorText = "自动登录失败, 请手动重新登录"
                 render()
@@ -206,7 +206,7 @@ class MainActivity : AppCompatActivity() {
         val banner = when {
             autoReloginActive -> null
             errorText != null -> errorText
-            v.sessionDead -> "登录已过期, 重新登录后即可恢复查询"
+            v.needsLogin -> "需要重新登录, 登录后即可恢复监控"
             else -> null
         }
         findViewById<MaterialCardView>(R.id.banner).visibility = if (banner != null) View.VISIBLE else View.GONE
@@ -301,13 +301,5 @@ class MainActivity : AppCompatActivity() {
         PowerLevel.WARN -> ContextCompat.getColor(this, R.color.level_warn)
         PowerLevel.LOW -> MaterialColors.getColor(swipe, androidx.appcompat.R.attr.colorError)
         PowerLevel.UNKNOWN -> MaterialColors.getColor(swipe, com.google.android.material.R.attr.colorOutline)
-    }
-
-    private fun schedulePeriodic() {
-        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-            QueryWorker.PERIODIC,
-            ExistingPeriodicWorkPolicy.KEEP,
-            PeriodicWorkRequestBuilder<QueryWorker>(QueryWorker.HOURS, TimeUnit.HOURS).build()
-        )
     }
 }

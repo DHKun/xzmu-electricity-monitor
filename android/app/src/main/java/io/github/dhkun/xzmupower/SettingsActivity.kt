@@ -82,6 +82,15 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
         findViewById<TextView>(R.id.versionSub).text = BuildConfig.VERSION_NAME
+        // 长按版本号看最近的同步记录, 用来分辨是没被系统调度还是恢复失败
+        findViewById<View>(R.id.rowVersion).setOnLongClickListener {
+            com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle("最近同步记录")
+                .setMessage(Prefs.runLog(this).asReversed().joinToString("\n").ifEmpty { "暂无记录" })
+                .setPositiveButton("关闭", null)
+                .show()
+            true
+        }
     }
 
     override fun onResume() {

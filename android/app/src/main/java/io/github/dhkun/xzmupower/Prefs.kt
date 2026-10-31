@@ -1,11 +1,16 @@
 package io.github.dhkun.xzmupower
 
 import android.content.Context
+import android.content.SharedPreferences
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /** 绑定配置与状态, 存 SharedPreferences */
 object Prefs {
     private const val FILE = "config"
     private const val MAX_SAMPLES = 120
+    private const val MAX_RUNS = 30
 
     private fun sp(ctx: Context) = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
@@ -16,9 +21,11 @@ object Prefs {
     fun roomVerify(ctx: Context) = sp(ctx).getString("roomVerify", "") ?: ""
     fun roomLabel(ctx: Context) = sp(ctx).getString("roomLabel", "") ?: ""
     fun threshold(ctx: Context) = sp(ctx).getFloat("threshold", 20f)
+    /** 旧版的 Cookie 快照, 现在只用于升级时迁移 */
     fun cookieSnapshot(ctx: Context) = sp(ctx).getString("cookieSnapshot", null)
 
-    /** 绑定新房间: 读数历史与告警状态一并重置 */
+    /** 绑定新房间: 读数历史、告警与恢复状态一并重置 */
+    @Synchronized
     fun saveBinding(ctx: Context, payProId: String, roomVerify: String, roomLabel: String) {
         sp(ctx).edit()
             .putString("payProId", payProId)
@@ -27,22 +34,96 @@ object Prefs {
             .putString("samples", "")
             .putFloat("peakQty", -1f)
             .putFloat("lastQty", -1f)
-            .putBoolean("sessionDead", false)
             .putBoolean("alerted", false)
             .putBoolean("configured", true)
+            .putInt("bindingGen", bindingGen(ctx) + 1)
+            .apply { putRecovery(this, RecoveryState()) }
+            .putBoolean("manualAlerted", false)
             .apply()
     }
 
     fun setThreshold(ctx: Context, v: Float) = sp(ctx).edit().putFloat("threshold", v).apply()
-    fun setCookieSnapshot(ctx: Context, cookie: String?) {
-        if (!cookie.isNullOrBlank()) sp(ctx).edit().putString("cookieSnapshot", cookie).apply()
-    }
 
     fun alerted(ctx: Context) = sp(ctx).getBoolean("alerted", false)
     fun setAlerted(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("alerted", v).apply()
 
-    fun sessionDead(ctx: Context) = sp(ctx).getBoolean("sessionDead", false)
-    fun setSessionDead(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("sessionDead", v).apply()
+    /** 自动恢复已无能为力, 需要用户手动登录 */
+    fun needsLogin(ctx: Context) = sp(ctx).getBoolean("needsLogin", false)
+    fun manualAlerted(ctx: Context) = sp(ctx).getBoolean("manualAlerted", false)
+    fun setManualAlerted(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("manualAlerted", v).apply()
+
+    private fun bindingGen(ctx: Context) = sp(ctx).getInt("bindingGen", 0)
+    private fun sessionGen(ctx: Context) = sp(ctx).getInt("sessionGen", 0)
+
+    /** 持久 Cookie, null 表示尚未从旧版迁移 */
+    fun cookieJar(ctx: Context): String? = sp(ctx).getString("cookieJar", null)
+
+    @Synchronized
+    fun seedCookieJar(ctx: Context, cookies: String) {
+        if (cookieJar(ctx) == null) sp(ctx).edit().putString("cookieJar", cookies).apply()
+    }
+
+    /** 新的交互登录生效: 更新会话代次, 让进行中的同步作废, 并解除认证退避 */
+    @Synchronized
+    fun replaceSession(ctx: Context, cookies: String) {
+        val e = sp(ctx).edit().putString("cookieJar", cookies).putInt("sessionGen", sessionGen(ctx) + 1)
+        putRecovery(e, recovery(ctx).copy(failCount = 0, nextAttemptAt = 0L, authBackoff = false))
+        e.apply()
+    }
+
+    /** 登录凭据变了: 进行中的认证结果不得再写回 */
+    @Synchronized
+    fun bumpSessionGen(ctx: Context) {
+        sp(ctx).edit().putInt("sessionGen", sessionGen(ctx) + 1).apply()
+    }
+
+    private fun recovery(ctx: Context): RecoveryState {
+        val s = sp(ctx)
+        return RecoveryState(
+            failCount = s.getInt("failCount", 0),
+            nextAttemptAt = s.getLong("nextAttemptAt", 0L),
+            authBackoff = s.getBoolean("authBackoff", false),
+            needsLogin = s.getBoolean("needsLogin", false),
+            lastOutcome = s.getString("lastOutcome", null)
+                ?.let { name -> Outcome.entries.firstOrNull { it.name == name } },
+        )
+    }
+
+    private fun putRecovery(e: SharedPreferences.Editor, r: RecoveryState) {
+        e.putInt("failCount", r.failCount)
+            .putLong("nextAttemptAt", r.nextAttemptAt)
+            .putBoolean("authBackoff", r.authBackoff)
+            .putBoolean("needsLogin", r.needsLogin)
+            .putString("lastOutcome", r.lastOutcome?.name)
+    }
+
+    fun syncSnapshot(ctx: Context) = SyncSnapshot(
+        bindingGen(ctx), sessionGen(ctx), payProId(ctx), roomVerify(ctx), cookieJar(ctx).orEmpty(), recovery(ctx))
+
+    /** 一轮同步的结果一次性原子落盘; 期间绑定或会话变过就整体放弃 */
+    @Synchronized
+    fun commitSync(ctx: Context, base: SyncSnapshot, c: SyncCommit): Boolean {
+        if (!configured(ctx) || bindingGen(ctx) != base.bindingGen || sessionGen(ctx) != base.sessionGen) return false
+        val e = sp(ctx).edit()
+        putRecovery(e, c.state)
+        if (!c.state.needsLogin) e.putBoolean("manualAlerted", false)
+        c.cookies?.let { e.putString("cookieJar", it) }
+        c.quantity?.let { applyReading(ctx, e, it.toFloat()) }
+        return e.commit()
+    }
+
+    /** 最近的执行记录, 用于判断是没被调度、网络失败还是恢复失败; 不含账号、房间与 Cookie */
+    fun runLog(ctx: Context): List<String> =
+        sp(ctx).getString("runLog", "").orEmpty().lines().filter { it.isNotEmpty() }
+
+    @Synchronized
+    fun appendRun(ctx: Context, startedAt: Long, trigger: Trigger, r: SyncReport, notifyBlocked: Boolean) {
+        val time = SimpleDateFormat("MM-dd HH:mm:ss", Locale.CHINA).format(Date(startedAt))
+        val ms = System.currentTimeMillis() - startedAt
+        val note = if (notifyBlocked) " 通知受限" else ""
+        val lines = runLog(ctx) + "$time ${trigger.name} ${r.stage.name} ${r.outcome.name} ${ms}ms$note"
+        sp(ctx).edit().putString("runLog", lines.takeLast(MAX_RUNS).joinToString("\n")).apply()
+    }
 
     /** 最近一次成功查询的时间戳(ms), 0 表示从未成功 */
     fun lastCheck(ctx: Context): Long = sp(ctx).getLong("lastCheck", 0L)
@@ -80,17 +161,25 @@ object Prefs {
             .putString("roomVerify", "101-1--9-902")
             .putString("roomLabel", "902房间")
             .putString("cookieSnapshot", "SESSION=demo")
+            .remove("cookieJar")
             .putFloat("threshold", 20f)
             .putFloat("lastQty", 244f)
             .putFloat("peakQty", 300f)
             .putLong("lastCheck", now)
-            .putBoolean("sessionDead", false)
+            .putBoolean("needsLogin", false)
             .putString("samples", samples)
             .apply()
     }
 
-    /** 记录一次成功读数: 更新最新值、满格基准、历史采样 */
+    /** 记录一次成功读数 */
     fun recordReading(ctx: Context, qty: Float) {
+        val e = sp(ctx).edit()
+        applyReading(ctx, e, qty)
+        e.apply()
+    }
+
+    /** 更新最新值、满格基准、历史采样 */
+    private fun applyReading(ctx: Context, e: SharedPreferences.Editor, qty: Float) {
         val now = System.currentTimeMillis()
         val peak = peakQty(ctx)
         val last = lastQty(ctx)
@@ -100,13 +189,10 @@ object Prefs {
         if (prev == null || prev.second != qty || now - prev.first > 30 * 60 * 1000L) {
             samples.add(now to qty)
         }
-        sp(ctx).edit().apply {
-            // 读数上涨视为充值, 满格基准跟着重置
-            if (peak <= 0f || qty > peak || (last >= 0f && qty > last + 0.5f)) putFloat("peakQty", qty)
-            putFloat("lastQty", qty)
-            putLong("lastCheck", now)
-            putBoolean("sessionDead", false)
-            putString("samples", samples.takeLast(MAX_SAMPLES).joinToString(",") { "${it.first}:${it.second}" })
-        }.apply()
+        // 读数上涨视为充值, 满格基准跟着重置
+        if (peak <= 0f || qty > peak || (last >= 0f && qty > last + 0.5f)) e.putFloat("peakQty", qty)
+        e.putFloat("lastQty", qty)
+        e.putLong("lastCheck", now)
+        e.putString("samples", samples.takeLast(MAX_SAMPLES).joinToString(",") { "${it.first}:${it.second}" })
     }
 }

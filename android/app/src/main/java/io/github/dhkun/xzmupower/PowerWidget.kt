@@ -37,7 +37,7 @@ class PowerWidget : AppWidgetProvider() {
             // 查询走 WorkManager, 完成后 PowerSync 会刷新所有小组件
             WorkManager.getInstance(ctx).enqueueUniqueWork(
                 REFRESH_WORK, ExistingWorkPolicy.KEEP,
-                OneTimeWorkRequestBuilder<QueryWorker>().build())
+                OneTimeWorkRequestBuilder<QueryWorker>().setInputData(QueryWorker.widgetInput()).build())
         }
     }
 
@@ -82,13 +82,13 @@ class PowerWidget : AppWidgetProvider() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             val days = if (v.daysLeft >= 0) "约可用 ${v.daysLeft} 天" else v.level.text
             // 会话过期时状态行改为提示重新登录, 圆点变红
-            val headline = if (v.sessionDead) "登录已过期" else v.level.text
+            val headline = if (v.needsLogin) "需要重新登录" else v.level.text
             val sub = when {
-                v.sessionDead && wide -> "点开 App 重新登录"
-                v.sessionDead -> "登录已过期"
+                v.needsLogin && wide -> "点开 App 重新登录"
+                v.needsLogin -> "需要重新登录"
                 else -> days
             }
-            val dot = if (v.sessionDead) levelColor(ctx, PowerLevel.LOW) else levelColor(ctx, v.level)
+            val dot = if (v.needsLogin) levelColor(ctx, PowerLevel.LOW) else levelColor(ctx, v.level)
             val time = if (v.lastAt > 0) SimpleDateFormat("HH:mm", Locale.CHINA).format(Date(v.lastAt)) else ""
 
             return RemoteViews(ctx.packageName, if (wide) R.layout.widget_wide else R.layout.widget_small).apply {

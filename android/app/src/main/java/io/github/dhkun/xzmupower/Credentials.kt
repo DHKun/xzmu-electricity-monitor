@@ -81,14 +81,22 @@ object Credentials {
             .putString("type", type)
             .putString("username", encrypt(username))
             .putString("password", encrypt(password))
-            .putString("customerCode", customerCode)
-            .putString("outid", encrypt(outid))
             .putBoolean("enabled", true)
             .apply()
+        Prefs.bumpSessionGen(ctx)
     }
 
     /** 关闭自动续期并抹掉保存的密码 */
     fun clear(ctx: Context) {
         sp(ctx).edit().clear().apply()
+        Prefs.bumpSessionGen(ctx)
+    }
+
+    /** 供认证恢复读取; 已开启却解不开时标记为暂不可用, 不等同于用户没开自动续期 */
+    fun forLogin(ctx: Context): CredsRead {
+        if (!sp(ctx).getBoolean("enabled", false)) return CredsRead(null)
+        val pw = password(ctx)
+        if (pw.isEmpty()) return CredsRead(null, unavailable = true)
+        return CredsRead(LoginCreds(loginType(ctx), username(ctx), pw, customerCode(ctx), outid(ctx)))
     }
 }

@@ -1,41 +1,77 @@
 package io.github.dhkun.xzmupower
 
 import android.content.Context
+import android.webkit.CookieManager
+import java.util.concurrent.locks.ReentrantLock
 
-/** 查询并把结果落到所有地方: 读数历史、Cookie 快照、低电量告警. 手动查询与后台任务共用 */
+/** 同步入口: 首页、后台任务、桌面组件共用。App 的所有入口都在同一进程, 进程内互斥即可 */
 object PowerSync {
+    private val running = ReentrantLock()
 
     /** 阻塞, 需在工作线程调用 */
-    fun sync(ctx: Context): PowerApi.Result {
-        val cookie = PowerApi.sessionCookie(ctx)
-        val r = PowerApi.queryRoomState(ctx, Prefs.payProId(ctx), Prefs.roomVerify(ctx))
-        when {
-            r.ok && r.quantity != null -> {
-                Prefs.setCookieSnapshot(ctx, mergeSession(cookie ?: "", r.setCookie))
-                Prefs.recordReading(ctx, r.quantity.toFloat())
+    fun sync(
+        ctx: Context,
+        trigger: Trigger,
+        cancelled: () -> Boolean = { false },
+        onRecovering: () -> Unit = {},
+    ): SyncReport {
+        if (!running.tryLock()) return SyncReport(Outcome.BUSY, Stage.QUERY)
+        val startedAt = System.currentTimeMillis()
+        try {
+            val r = SyncEngine(PrefsSyncStore(ctx), UrlTransport).run(trigger, cancelled, onRecovering)
+            if (r.outcome == Outcome.OK && r.quantity != null) {
                 AlertEval.evaluate(ctx, r.quantity, r.unit)
+                AlertNotify.cancelLogin(ctx)
             }
-            r.sessionDead -> {
-                // 只在刚失效时提醒一次, 不每个周期重复打扰
-                if (!Prefs.sessionDead(ctx)) {
-                    AlertNotify.info(ctx, "电费监控: 登录已过期",
-                        "点击重新登录, 登录后选择房间即可恢复监控", openSetup = true)
-                }
-                Prefs.setSessionDead(ctx, true)
-            }
+            val alertPending = Prefs.needsLogin(ctx) && !Prefs.manualAlerted(ctx)
+            val delivered = alertPending && AlertNotify.login(ctx)
+            if (delivered) Prefs.setManualAlerted(ctx, true)
+            Prefs.appendRun(ctx, startedAt, trigger, r, notifyBlocked = alertPending && !delivered)
+            PowerWidget.updateAll(ctx)
+            return r
+        } finally {
+            running.unlock()
         }
-        PowerWidget.updateAll(ctx)
-        return r
     }
 
-    /** 服务端轮换 SESSION 时, 把新值合并进原 Cookie 串 */
-    fun mergeSession(cookie: String, setCookie: String?): String {
-        val fresh = setCookie?.let { Regex("SESSION=([^;,\\s]+)").find(it) }?.let { "SESSION=${it.groupValues[1]}" }
-            ?: return cookie
-        return when {
-            cookie.isBlank() -> fresh
-            "SESSION=" in cookie -> cookie.replace(Regex("SESSION=[^;]*"), fresh)
-            else -> "$cookie; $fresh"
+    private class PrefsSyncStore(private val ctx: Context) : SyncStore {
+        override fun begin(): SyncSnapshot? {
+            if (!Prefs.configured(ctx)) return null
+            WebSession.migrateIfNeeded(ctx)
+            return Prefs.syncSnapshot(ctx)
         }
+
+        override fun creds() = Credentials.forLogin(ctx)
+
+        override fun commit(base: SyncSnapshot, commit: SyncCommit) = Prefs.commitSync(ctx, base, commit)
+    }
+}
+
+/** WebView 登录态与后台 Cookie 的唯一交接点: 持久存储是权威, WebView 只在交互登录后导入一次 */
+object WebSession {
+    private fun readWebCookies(): CookieJar {
+        val jar = CookieJar()
+        runCatching {
+            val cm = CookieManager.getInstance()
+            cm.flush()
+            jar.importPlain(PowerApi.HOST, "/CloudPayment/", cm.getCookie(PowerApi.SESSION_URL))
+            jar.importPlain(PowerApi.OPEN_HOST, "/", cm.getCookie(PowerApi.OPEN_URL))
+        }
+        return jar
+    }
+
+    /** 用户刚完成交互登录: 换入 WebView 里的新会话, 进行中的旧同步结果随之作废 */
+    fun adoptInteractiveLogin(ctx: Context) {
+        Prefs.replaceSession(ctx, readWebCookies().serialize())
+    }
+
+    /** 升级自旧版: 从 WebView 与 Cookie 快照建立持久存储, 只做一次 */
+    fun migrateIfNeeded(ctx: Context) {
+        if (Prefs.cookieJar(ctx) != null) return
+        val jar = readWebCookies()
+        if (!jar.has(PowerApi.HOST, "SESSION")) {
+            jar.importPlain(PowerApi.HOST, "/CloudPayment/", Prefs.cookieSnapshot(ctx))
+        }
+        Prefs.seedCookieJar(ctx, jar.serialize())
     }
 }
