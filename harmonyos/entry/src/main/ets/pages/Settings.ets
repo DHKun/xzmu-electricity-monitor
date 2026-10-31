@@ -33,6 +33,17 @@ export struct SettingsPage {
     }).catch(() => {});
   }
 
+  /** 最近的同步记录, 用来分辨是没被系统调度、网络失败还是恢复失败 */
+  showRunLog(): void {
+    Prefs.reload();
+    const lines: string[] = Prefs.getRunLog().reverse();
+    this.getUIContext().showAlertDialog({
+      title: '最近同步记录',
+      message: lines.length > 0 ? lines.join('\n') : '暂无记录',
+      confirm: { value: '关闭', action: () => {} }
+    });
+  }
+
   /** 已开启则确认后关闭并删除保存的密码; 未开启则提示去绑定页勾选 */
   toggleAutoLogin(): void {
     if (!Credentials.has()) {
@@ -194,7 +205,7 @@ export struct SettingsPage {
           this.groupTitle('关于')
           Column() {
             this.row($r('sys.symbol.info_circle'), $r('app.color.set_gray'), '版本', BuildProfile.VERSION_NAME, false,
-              () => {})
+              () => this.showRunLog())
             this.divider()
             this.row($r('sys.symbol.lightbulb'), $r('app.color.set_gray'), '数据来源', '完美校园云缴费', false, () => {})
           }

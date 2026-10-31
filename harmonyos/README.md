@@ -20,8 +20,9 @@
 hdc shell aa start -a EntryAbility -b io.github.dhkun.xzmupower --pb xzmu.demo true
 ```
 
-> 卡片和后台任务运行在独立进程，拿不到 WebView 会话，用的是绑定或上次成功查询时保存的
-> Cookie 快照。服务端会话过期后，卡片会显示"登录已过期"，打开 App 重新绑定即可恢复。
+> 卡片和后台任务运行在独立进程，拿不到 WebView。后台任务发现会话过期时用本机保存的密码自行恢复，
+> 不用打开 App；卡片进程寿命太短，只查询不恢复。确实需要人工处理时显示"需要重新登录"，打开 App 登录即可。
+> 设置页点按版本号可看最近的同步记录。
 
 ## 构建
 
@@ -36,9 +37,15 @@ hvigorw assembleHap --mode module -p product=default -p buildMode=release
 # 产物: entry/build/default/outputs/default/entry-default-unsigned.hap
 ```
 
+同步逻辑层不依赖系统能力，可离线测试（在仓库根目录运行）：
+
+```bash
+node --experimental-transform-types --no-warnings harmonyos/logic-test/logic.test.mjs
+```
+
 ## 安装（侧载）
 
-Releases 里提供的是**未签名 HAP**（`MinDaPower-v1.2.0-harmonyos-unsigned.hap`）。
+Releases 里提供的是**未签名 HAP**（`MinDaPower-v<版本>-harmonyos-unsigned.hap`）。
 鸿蒙安装 HAP 必须有签名，请自行侧载，常用方式：
 
 1. DevEco Studio 打开本工程 → File → Project Structure → Signing Configs →
